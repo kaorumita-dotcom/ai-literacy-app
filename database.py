@@ -131,6 +131,47 @@ def init_database():
         )
     """)
 
+    # AI対話履歴テーブル
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            meeting_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            message TEXT NOT NULL,
+            is_ai BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    # 学びのメモテーブル
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS learning_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            meeting_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            note TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    # フォローアップミーティングテーブル
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS follow_up_meetings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_meeting_id INTEGER NOT NULL,
+            follow_up_meeting_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (original_meeting_id) REFERENCES meetings(id),
+            FOREIGN KEY (follow_up_meeting_id) REFERENCES meetings(id),
+            UNIQUE(original_meeting_id, follow_up_meeting_id)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -599,6 +640,242 @@ def update_recording_summary(meeting_id: int, summary: str) -> Tuple[bool, str]:
         return True, "サマリーを更新しました"
     except Exception as e:
         return False, f"エラーが発生しました: {str(e)}"
+
+# AI対話関連の関数
+
+def save_chat_message(meeting_id: int, user_id: int, message: str, is_ai: bool = False) -> Tuple[bool, str]:
+    """チャットメッセージを保存"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO chat_history (meeting_id, user_id, message, is_ai) VALUES (?, ?, ?, ?)",
+            (meeting_id, user_id, message, is_ai)
+        )
+        conn.commit()
+        conn.close()
+        return True, "メッセージを保存しました"
+    except Exception as e:
+        return False, f"エラーが発生しました: {str(e)}"
+
+def get_chat_history(meeting_id: int) -> List[Dict]:
+    """チャット履歴を取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT ch.*, u.name as user_name
+        FROM chat_history ch
+        JOIN users u ON ch.user_id = u.id
+        WHERE ch.meeting_id = ?
+        ORDER BY ch.created_at ASC
+    """, (meeting_id,))
+    history = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return history
+
+def generate_ai_response(meeting_id: int, user_message: str) -> str:
+    """模擬AI応答を生成"""
+    import random
+
+    # 議事録を取得してコンテキストとして使用
+    recording = get_recording_by_meeting(meeting_id)
+    transcript = recording['transcript'] if recording and recording['transcript'] else ""
+
+    # キーワードベースの簡単な応答ロジック
+    user_message_lower = user_message.lower()
+
+    if "詳しく" in user_message or "もっと" in user_message or "教えて" in user_message:
+        responses = [
+            f"議事録を確認したところ、その部分について説明いたします。{transcript[:100] if transcript else 'まだ議事録が入力されていませんが、'}一般的には、AIの学習では基礎から応用まで段階的に理解を深めることが重要です。",
+            "その点についてですが、シニアの方々がAIを学ぶ際は、まず実際に使ってみることが大切です。失敗を恐れず、気軽に試してみましょう。",
+            "良い質問ですね。AIを活用する上では、具体的な例から学ぶのが効果的です。例えば、日常の困りごとをAIに相談してみるなど、身近なことから始めてみてください。"
+        ]
+    elif "どう" in user_message or "方法" in user_message or "やり方" in user_message:
+        responses = [
+            "その方法ですが、まずは簡単なことから始めるのがおすすめです。例えば、AIに「今日の天気を教えて」といった質問から始めて、徐々に複雑な質問に挑戦していきましょう。",
+            "手順としては、①まず試してみる、②うまくいかなかったら質問の仕方を変えてみる、③成功したパターンを覚えておく、という流れが効果的です。",
+            "実践的な方法として、ミーティングで学んだことを日常生活で使ってみることをお勧めします。繰り返し使うことで自然と身につきます。"
+        ]
+    elif "例" in user_message or "具体的" in user_message:
+        responses = [
+            "具体例をいくつか挙げますと、①レシピの検索、②健康に関する質問、③旅行の計画、④メールの文章作成などがあります。どれも日常的に使える便利な機能です。",
+            "例えば、「高血圧に良い食事を教えて」「孫へのお誕生日メッセージを考えて」「東京の桜の名所を教えて」といった質問ができます。",
+            "実際の使用例として、料理中に「この食材の代わりになるものは？」と聞いたり、「この文章を丁寧な言い方に直して」とお願いしたりできます。"
+        ]
+    elif "わからない" in user_message or "難しい" in user_message:
+        responses = [
+            "大丈夫です、最初は誰でも難しく感じます。まずは簡単なことから一つずつ覚えていけば、必ずできるようになります。焦らずゆっくり学んでいきましょう。",
+            "難しいと感じたら、いつでもグループのメンバーやホストに相談してくださいね。一人で悩まず、みんなで助け合いながら学習を進めましょう。",
+            "わからないことがあるのは当然です。次のミーティングでその点を重点的に学習することもできますので、遠慮なく質問してください。"
+        ]
+    elif "ありがとう" in user_message or "感謝" in user_message:
+        responses = [
+            "どういたしまして！引き続き学習を楽しんでくださいね。わからないことがあれば、いつでも質問してください。",
+            "お役に立てて嬉しいです。これからも一緒にAIの活用方法を学んでいきましょう！",
+            "こちらこそ、積極的に学習されている姿勢が素晴らしいです。この調子で続けてください！"
+        ]
+    else:
+        responses = [
+            f"ご質問ありがとうございます。議事録によると、{transcript[:100] if transcript else 'ミーティングでは様々なことを学びました。'}具体的にどの部分について詳しく知りたいですか？",
+            "その点について考えてみましょう。AIの学習では、実践を重ねることが一番の近道です。まずは気軽に試してみることをお勧めします。",
+            "良い着眼点ですね。ミーティングで学んだことを復習しながら、少しずつスキルアップしていきましょう。何か具体的に知りたいことはありますか？"
+        ]
+
+    return random.choice(responses)
+
+# 学びのメモ関連の関数
+
+def save_learning_note(meeting_id: int, user_id: int, note: str) -> Tuple[bool, str]:
+    """学びのメモを保存"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        # 既存のメモがあるか確認
+        cursor.execute(
+            "SELECT id FROM learning_notes WHERE meeting_id = ? AND user_id = ?",
+            (meeting_id, user_id)
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            # 更新
+            cursor.execute("""
+                UPDATE learning_notes
+                SET note = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE meeting_id = ? AND user_id = ?
+            """, (note, meeting_id, user_id))
+            message = "学びのメモを更新しました"
+        else:
+            # 新規作成
+            cursor.execute(
+                "INSERT INTO learning_notes (meeting_id, user_id, note) VALUES (?, ?, ?)",
+                (meeting_id, user_id, note)
+            )
+            message = "学びのメモを保存しました"
+
+        conn.commit()
+        conn.close()
+        return True, message
+    except Exception as e:
+        return False, f"エラーが発生しました: {str(e)}"
+
+def get_learning_notes(meeting_id: int) -> List[Dict]:
+    """ミーティングの学びのメモを取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT ln.*, u.name as user_name
+        FROM learning_notes ln
+        JOIN users u ON ln.user_id = u.id
+        WHERE ln.meeting_id = ?
+        ORDER BY ln.created_at DESC
+    """, (meeting_id,))
+    notes = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return notes
+
+def get_user_learning_note(meeting_id: int, user_id: int) -> Optional[Dict]:
+    """ユーザーの学びのメモを取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM learning_notes
+        WHERE meeting_id = ? AND user_id = ?
+    """, (meeting_id, user_id))
+    note = cursor.fetchone()
+    conn.close()
+
+    if note:
+        return dict(note)
+    return None
+
+# フォローアップミーティング関連の関数
+
+def create_follow_up_meeting(original_meeting_id: int, follow_up_meeting_id: int) -> Tuple[bool, str]:
+    """フォローアップミーティングを関連付け"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO follow_up_meetings (original_meeting_id, follow_up_meeting_id) VALUES (?, ?)",
+            (original_meeting_id, follow_up_meeting_id)
+        )
+        conn.commit()
+        conn.close()
+        return True, "フォローアップミーティングを設定しました"
+    except sqlite3.IntegrityError:
+        return False, "既に設定されています"
+    except Exception as e:
+        return False, f"エラーが発生しました: {str(e)}"
+
+def get_follow_up_meeting(original_meeting_id: int) -> Optional[Dict]:
+    """元のミーティングのフォローアップを取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT m.*, u.name as host_name, g.name as group_name
+        FROM follow_up_meetings fm
+        JOIN meetings m ON fm.follow_up_meeting_id = m.id
+        JOIN users u ON m.host_id = u.id
+        JOIN groups g ON m.group_id = g.id
+        WHERE fm.original_meeting_id = ?
+    """, (original_meeting_id,))
+    meeting = cursor.fetchone()
+    conn.close()
+
+    if meeting:
+        return dict(meeting)
+    return None
+
+def get_original_meeting(follow_up_meeting_id: int) -> Optional[Dict]:
+    """フォローアップの元のミーティングを取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT m.*, u.name as host_name, g.name as group_name
+        FROM follow_up_meetings fm
+        JOIN meetings m ON fm.original_meeting_id = m.id
+        JOIN users u ON m.host_id = u.id
+        JOIN groups g ON m.group_id = g.id
+        WHERE fm.follow_up_meeting_id = ?
+    """, (follow_up_meeting_id,))
+    meeting = cursor.fetchone()
+    conn.close()
+
+    if meeting:
+        return dict(meeting)
+    return None
+
+def get_upcoming_meetings(user_id: int, days_ahead: int = 7) -> List[Dict]:
+    """今後のミーティングを取得"""
+    from datetime import datetime, timedelta
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # 現在時刻とN日後の時刻
+    now = datetime.now().isoformat()
+    future = (datetime.now() + timedelta(days=days_ahead)).isoformat()
+
+    cursor.execute("""
+        SELECT m.*, u.name as host_name, g.name as group_name,
+               COUNT(mp2.user_id) as participant_count
+        FROM meetings m
+        JOIN meeting_participants mp ON m.id = mp.meeting_id
+        JOIN users u ON m.host_id = u.id
+        JOIN groups g ON m.group_id = g.id
+        LEFT JOIN meeting_participants mp2 ON m.id = mp2.meeting_id
+        WHERE mp.user_id = ?
+          AND m.scheduled_at IS NOT NULL
+          AND m.scheduled_at >= ?
+          AND m.scheduled_at <= ?
+        GROUP BY m.id
+        ORDER BY m.scheduled_at ASC
+    """, (user_id, now, future))
+    meetings = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return meetings
 
 # データベース初期化
 if __name__ == "__main__":

@@ -362,6 +362,56 @@ def show_dashboard():
         else:
             st.info("まだグループを作成していません")
 
+    st.markdown("---")
+
+    # 今後のミーティング予定（リマインダー）
+    st.markdown("## 📅 今後のミーティング予定")
+
+    upcoming_meetings = db.get_upcoming_meetings(user['id'], days_ahead=7)
+
+    if upcoming_meetings:
+        from datetime import datetime
+
+        for meeting in upcoming_meetings:
+            # 日数計算
+            scheduled_dt = datetime.fromisoformat(meeting['scheduled_at'])
+            now = datetime.now()
+            days_until = (scheduled_dt - now).days
+
+            # カードの色を日数によって変更
+            if days_until <= 1:
+                card_style = 'background-color: #fff3cd; border: 3px solid #ffc107;'  # 黄色（緊急）
+            elif days_until <= 3:
+                card_style = 'background-color: #d1ecf1; border: 3px solid #17a2b8;'  # 青（近い）
+            else:
+                card_style = 'background-color: #d4edda; border: 3px solid #28a745;'  # 緑（余裕あり）
+
+            st.markdown(f'<div class="group-card" style="{card_style}">', unsafe_allow_html=True)
+
+            # リマインダーメッセージ
+            if days_until == 0:
+                reminder_text = "🔔 **本日開催！**"
+            elif days_until == 1:
+                reminder_text = "⏰ **明日開催！**"
+            else:
+                reminder_text = f"📆 **あと{days_until}日**"
+
+            st.markdown(f"### {reminder_text} {meeting['title']}")
+            st.markdown(f"**グループ:** {meeting['group_name']}")
+            st.markdown(f"**日時:** {scheduled_dt.strftime('%Y年%m月%d日 %H:%M')}")
+            st.markdown(f"**ホスト:** {meeting['host_name']}")
+
+            # 詳細を見るボタン
+            if st.button(f"📝 詳細を見る", key=f"view_meeting_{meeting['id']}"):
+                st.session_state.selected_meeting = meeting['id']
+                st.session_state.page = 'meeting_detail'
+                st.rerun()
+
+            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown("")
+    else:
+        st.info("今後7日間の予定はありません")
+
     # 招待通知
     invitations = db.get_user_invitations(user['email'])
     if invitations:
@@ -756,6 +806,17 @@ def show_meeting_detail_page():
 
     st.markdown("---")
 
+    # フォローアップミーティング情報
+    follow_up = db.get_follow_up_meeting(meeting_id)
+    original = db.get_original_meeting(meeting_id)
+
+    if follow_up:
+        st.info(f"📅 フォローアップミーティング: {follow_up['title']} ({follow_up['scheduled_at'][:10] if follow_up.get('scheduled_at') else '日時未定'})")
+    elif original:
+        st.info(f"🔙 このミーティングは「{original['title']}」のフォローアップです")
+
+    st.markdown("---")
+
     # 参加者リスト
     with st.expander("👥 参加者一覧"):
         participants = db.get_meeting_participants(meeting_id)
@@ -768,7 +829,7 @@ def show_meeting_detail_page():
     # 録音・議事録セクション
     recording = db.get_recording_by_meeting(meeting_id)
 
-    tab1, tab2 = st.tabs(["📝 議事録", "🎤 録音"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📝 議事録", "🤖 AIに質問", "📚 学んだこと", "🎤 録音"])
 
     with tab1:
         st.markdown("## 議事録")
@@ -826,6 +887,97 @@ def show_meeting_detail_page():
                     st.error(message)
 
     with tab2:
+        st.markdown("## 🤖 AIに質問する")
+        st.markdown("議事録について、AIに質問できます。シニア向けの優しいAIがお答えします。")
+        st.markdown("---")
+
+        # チャット履歴を表示
+        chat_history = db.get_chat_history(meeting_id)
+
+        if chat_history:
+            st.markdown("### 💬 会話履歴")
+            for msg in chat_history:
+                if msg['is_ai']:
+                    st.markdown(f'<div style="background-color: #e3f2fd; padding: 15px; border-radius: 10px; margin-bottom: 10px;">'
+                               f'<strong>🤖 AI:</strong><br>{msg["message"]}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div style="background-color: #f5f5f5; padding: 15px; border-radius: 10px; margin-bottom: 10px;">'
+                               f'<strong>👤 {msg["user_name"]}:</strong><br>{msg["message"]}</div>', unsafe_allow_html=True)
+            st.markdown("---")
+
+        # チャット入力
+        st.markdown("### ✍️ 質問を入力")
+
+        user_question = st.text_area(
+            "質問内容",
+            height=150,
+            placeholder="例：「この部分をもっと詳しく教えて」「AIの使い方がわからない」など",
+            key="ai_question"
+        )
+
+        if st.button("💬 質問する", type="primary"):
+            if user_question:
+                # ユーザーのメッセージを保存
+                db.save_chat_message(meeting_id, user['id'], user_question, is_ai=False)
+
+                # AI応答を生成
+                ai_response = db.generate_ai_response(meeting_id, user_question)
+
+                # AI応答を保存
+                db.save_chat_message(meeting_id, user['id'], ai_response, is_ai=True)
+
+                st.success("質問を送信しました！")
+                st.rerun()
+            else:
+                st.warning("質問を入力してください")
+
+    with tab3:
+        st.markdown("## 📚 学んだこと")
+        st.markdown("このミーティングで学んだことを記録しましょう。")
+        st.markdown("---")
+
+        # 自分の学びのメモ
+        user_note = db.get_user_learning_note(meeting_id, user['id'])
+
+        st.markdown("### 📝 あなたの学びのメモ")
+        learning_note = st.text_area(
+            "学んだことを記録",
+            value=user_note['note'] if user_note else "",
+            height=200,
+            placeholder="例：今日はAIへの質問の仕方を学びました。具体的に聞くことが大切だとわかりました。",
+            key="learning_note"
+        )
+
+        if st.button("💾 学びを保存", type="primary"):
+            if learning_note:
+                success, message = db.save_learning_note(meeting_id, user['id'], learning_note)
+                if success:
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
+            else:
+                st.warning("学んだことを入力してください")
+
+        st.markdown("---")
+
+        # 他の参加者の学びのメモを表示
+        st.markdown("### 👥 みんなの学び")
+        all_notes = db.get_learning_notes(meeting_id)
+
+        if all_notes:
+            for note in all_notes:
+                if note['user_id'] != user['id']:  # 自分以外のメモを表示
+                    st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
+                    st.markdown(f"**{note['user_name']}さんの学び**")
+                    st.markdown(note['note'])
+                    st.markdown(f"_記録日: {note['created_at'][:10]}_")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown("")
+        else:
+            st.info("まだ誰も学びを記録していません")
+
+    with tab4:
         st.markdown("## 録音")
         st.markdown("")
 
@@ -843,6 +995,44 @@ def show_meeting_detail_page():
         # - 録音開始/停止ボタン
         # - 録音した音声のプレビュー
         # - 文字起こし（Whisper API連携）
+
+    st.markdown("---")
+
+    # フォローアップミーティング作成（ホストのみ）
+    if user['role'] == 'host' and user['id'] == meeting['host_id']:
+        if not follow_up:
+            with st.expander("📅 フォローアップミーティングを設定"):
+                st.markdown("このミーティングの1週間後にフォローアップミーティングを作成できます。")
+
+                if st.button("🔄 フォローアップミーティングを作成", type="primary"):
+                    from datetime import datetime, timedelta
+
+                    # 1週間後の日時を計算
+                    if meeting['scheduled_at']:
+                        original_dt = datetime.fromisoformat(meeting['scheduled_at'])
+                        followup_dt = original_dt + timedelta(days=7)
+                    else:
+                        followup_dt = datetime.now() + timedelta(days=7)
+
+                    # フォローアップミーティングを作成
+                    followup_title = f"{meeting['title']} - フォローアップ"
+                    followup_description = f"前回のミーティングのフォローアップです。学んだことを共有し、質問があれば解決しましょう。"
+
+                    success, message, followup_id = db.create_meeting(
+                        followup_title,
+                        followup_description,
+                        meeting['group_id'],
+                        user['id'],
+                        followup_dt.isoformat()
+                    )
+
+                    if success:
+                        # フォローアップとして関連付け
+                        db.create_follow_up_meeting(meeting_id, followup_id)
+                        st.success("フォローアップミーティングを作成しました！")
+                        st.rerun()
+                    else:
+                        st.error(message)
 
     st.markdown("---")
 
