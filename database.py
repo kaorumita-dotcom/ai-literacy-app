@@ -87,6 +87,50 @@ def init_database():
         )
     """)
 
+    # ミーティングテーブル
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS meetings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            group_id INTEGER NOT NULL,
+            host_id INTEGER NOT NULL,
+            scheduled_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (group_id) REFERENCES groups(id),
+            FOREIGN KEY (host_id) REFERENCES users(id)
+        )
+    """)
+
+    # ミーティング参加者テーブル
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS meeting_participants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            meeting_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            UNIQUE(meeting_id, user_id)
+        )
+    """)
+
+    # 録音・議事録テーブル
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS recordings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            meeting_id INTEGER NOT NULL,
+            audio_file_path TEXT,
+            transcript TEXT,
+            summary TEXT,
+            created_by INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id),
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -393,6 +437,168 @@ def get_group_progress(group_id: int) -> List[Dict]:
     progress = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return progress
+
+# ミーティング関連の関数
+
+def create_meeting(title: str, description: str, group_id: int, host_id: int, scheduled_at: str) -> Tuple[bool, str, Optional[int]]:
+    """新規ミーティングを作成"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "INSERT INTO meetings (title, description, group_id, host_id, scheduled_at) VALUES (?, ?, ?, ?, ?)",
+            (title, description, group_id, host_id, scheduled_at)
+        )
+        meeting_id = cursor.lastrowid
+
+        # グループメンバーを自動的に参加者に追加
+        cursor.execute("""
+            INSERT INTO meeting_participants (meeting_id, user_id)
+            SELECT ?, user_id FROM group_members WHERE group_id = ?
+        """, (meeting_id, group_id))
+
+        conn.commit()
+        conn.close()
+        return True, "ミーティングを作成しました", meeting_id
+    except Exception as e:
+        return False, f"エラーが発生しました: {str(e)}", None
+
+def get_meetings_by_group(group_id: int) -> List[Dict]:
+    """グループのミーティング一覧を取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT m.*, u.name as host_name, COUNT(mp.user_id) as participant_count
+        FROM meetings m
+        JOIN users u ON m.host_id = u.id
+        LEFT JOIN meeting_participants mp ON m.id = mp.meeting_id
+        WHERE m.group_id = ?
+        GROUP BY m.id
+        ORDER BY m.scheduled_at DESC, m.created_at DESC
+    """, (group_id,))
+    meetings = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return meetings
+
+def get_meetings_by_user(user_id: int) -> List[Dict]:
+    """ユーザーが参加するミーティング一覧を取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT m.*, u.name as host_name, g.name as group_name, COUNT(mp2.user_id) as participant_count
+        FROM meetings m
+        JOIN meeting_participants mp ON m.id = mp.meeting_id
+        JOIN users u ON m.host_id = u.id
+        JOIN groups g ON m.group_id = g.id
+        LEFT JOIN meeting_participants mp2 ON m.id = mp2.meeting_id
+        WHERE mp.user_id = ?
+        GROUP BY m.id
+        ORDER BY m.scheduled_at DESC, m.created_at DESC
+    """, (user_id,))
+    meetings = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return meetings
+
+def get_meeting_by_id(meeting_id: int) -> Optional[Dict]:
+    """ミーティングIDからミーティング情報を取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT m.*, u.name as host_name, g.name as group_name
+        FROM meetings m
+        JOIN users u ON m.host_id = u.id
+        JOIN groups g ON m.group_id = g.id
+        WHERE m.id = ?
+    """, (meeting_id,))
+    meeting = cursor.fetchone()
+    conn.close()
+
+    if meeting:
+        return dict(meeting)
+    return None
+
+def get_meeting_participants(meeting_id: int) -> List[Dict]:
+    """ミーティング参加者一覧を取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT u.id, u.name, u.email, u.role, mp.joined_at
+        FROM meeting_participants mp
+        JOIN users u ON mp.user_id = u.id
+        WHERE mp.meeting_id = ?
+        ORDER BY mp.joined_at ASC
+    """, (meeting_id,))
+    participants = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return participants
+
+def save_recording(meeting_id: int, audio_file_path: Optional[str], transcript: str, created_by: int) -> Tuple[bool, str, Optional[int]]:
+    """録音・議事録を保存"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        # 既存の録音があるか確認
+        cursor.execute("SELECT id FROM recordings WHERE meeting_id = ?", (meeting_id,))
+        existing = cursor.fetchone()
+
+        if existing:
+            # 更新
+            cursor.execute("""
+                UPDATE recordings
+                SET audio_file_path = ?, transcript = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE meeting_id = ?
+            """, (audio_file_path, transcript, meeting_id))
+            recording_id = existing['id']
+            message = "議事録を更新しました"
+        else:
+            # 新規作成
+            cursor.execute(
+                "INSERT INTO recordings (meeting_id, audio_file_path, transcript, created_by) VALUES (?, ?, ?, ?)",
+                (meeting_id, audio_file_path, transcript, created_by)
+            )
+            recording_id = cursor.lastrowid
+            message = "議事録を保存しました"
+
+        conn.commit()
+        conn.close()
+        return True, message, recording_id
+    except Exception as e:
+        return False, f"エラーが発生しました: {str(e)}", None
+
+def get_recording_by_meeting(meeting_id: int) -> Optional[Dict]:
+    """ミーティングの録音・議事録を取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT r.*, u.name as created_by_name
+        FROM recordings r
+        JOIN users u ON r.created_by = u.id
+        WHERE r.meeting_id = ?
+    """, (meeting_id,))
+    recording = cursor.fetchone()
+    conn.close()
+
+    if recording:
+        return dict(recording)
+    return None
+
+def update_recording_summary(meeting_id: int, summary: str) -> Tuple[bool, str]:
+    """議事録のサマリーを更新"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE recordings
+            SET summary = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE meeting_id = ?
+        """, (summary, meeting_id))
+        conn.commit()
+        conn.close()
+        return True, "サマリーを更新しました"
+    except Exception as e:
+        return False, f"エラーが発生しました: {str(e)}"
 
 # データベース初期化
 if __name__ == "__main__":

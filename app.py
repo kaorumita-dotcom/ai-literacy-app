@@ -604,6 +604,252 @@ def show_groups_page():
         else:
             st.info("まだグループに参加していません")
 
+# ミーティング管理ページ
+def show_meetings_page():
+    user = st.session_state.user
+
+    st.title("📹 ミーティング")
+    st.markdown("---")
+
+    # タブで機能を分割
+    if user['role'] == 'host':
+        tab1, tab2 = st.tabs(["ミーティング一覧", "新規作成"])
+
+        with tab1:
+            show_meetings_list(user)
+
+        with tab2:
+            show_create_meeting(user)
+    else:
+        show_meetings_list(user)
+
+def show_meetings_list(user):
+    """ミーティング一覧を表示"""
+    st.markdown("## 📋 参加するミーティング")
+    st.markdown("")
+
+    meetings = db.get_meetings_by_user(user['id'])
+
+    if meetings:
+        for meeting in meetings:
+            st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
+            st.markdown(f"### 📹 {meeting['title']}")
+
+            if meeting['description']:
+                st.markdown(f"**説明:** {meeting['description']}")
+
+            st.markdown(f"**グループ:** {meeting['group_name']}")
+            st.markdown(f"**ホスト:** {meeting['host_name']}")
+            st.markdown(f"**参加者数:** {meeting['participant_count']}名")
+
+            if meeting['scheduled_at']:
+                from datetime import datetime
+                try:
+                    scheduled_dt = datetime.fromisoformat(meeting['scheduled_at'])
+                    st.markdown(f"**日時:** {scheduled_dt.strftime('%Y年%m月%d日 %H:%M')}")
+                except:
+                    st.markdown(f"**日時:** {meeting['scheduled_at']}")
+
+            # 議事録表示
+            recording = db.get_recording_by_meeting(meeting['id'])
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📝 議事録を見る", key=f"view_minutes_{meeting['id']}"):
+                    st.session_state.selected_meeting = meeting['id']
+                    st.session_state.page = 'meeting_detail'
+                    st.rerun()
+
+            with col2:
+                if recording:
+                    st.success("✅ 議事録あり")
+                else:
+                    st.info("議事録なし")
+
+            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown("")
+    else:
+        st.info("参加予定のミーティングはありません")
+
+def show_create_meeting(user):
+    """ミーティング作成フォーム"""
+    st.markdown("## 新しいミーティングを作成")
+    st.markdown("")
+
+    # ホストが管理しているグループを取得
+    groups = db.get_groups_by_host(user['id'])
+
+    if not groups:
+        st.warning("ミーティングを作成するには、まずグループを作成してください")
+        if st.button("グループを作成する"):
+            st.session_state.page = 'groups'
+            st.rerun()
+        return
+
+    # グループ選択
+    group_options = {g['id']: f"{g['name']} ({g['member_count']}名)" for g in groups}
+    selected_group_id = st.selectbox(
+        "グループを選択",
+        options=list(group_options.keys()),
+        format_func=lambda x: group_options[x],
+        key="meeting_group"
+    )
+
+    meeting_title = st.text_input("ミーティングタイトル", key="meeting_title")
+    meeting_description = st.text_area("ミーティングの説明", key="meeting_description", height=150)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        meeting_date = st.date_input("日付", key="meeting_date")
+    with col2:
+        meeting_time = st.time_input("時刻", key="meeting_time")
+
+    st.markdown("")
+
+    if st.button("ミーティングを作成", type="primary"):
+        if meeting_title and selected_group_id:
+            from datetime import datetime
+            scheduled_at = datetime.combine(meeting_date, meeting_time).isoformat()
+
+            success, message, meeting_id = db.create_meeting(
+                meeting_title,
+                meeting_description,
+                selected_group_id,
+                user['id'],
+                scheduled_at
+            )
+
+            if success:
+                st.success(message)
+                st.session_state.selected_meeting = meeting_id
+                st.rerun()
+            else:
+                st.error(message)
+        else:
+            st.warning("タイトルとグループを選択してください")
+
+# ミーティング詳細・議事録ページ
+def show_meeting_detail_page():
+    user = st.session_state.user
+    meeting_id = st.session_state.get('selected_meeting')
+
+    if not meeting_id:
+        st.error("ミーティングが選択されていません")
+        return
+
+    meeting = db.get_meeting_by_id(meeting_id)
+    if not meeting:
+        st.error("ミーティングが見つかりません")
+        return
+
+    st.title(f"📹 {meeting['title']}")
+    st.markdown(f"**グループ:** {meeting['group_name']}")
+    st.markdown(f"**ホスト:** {meeting['host_name']}")
+
+    if meeting['scheduled_at']:
+        from datetime import datetime
+        try:
+            scheduled_dt = datetime.fromisoformat(meeting['scheduled_at'])
+            st.markdown(f"**日時:** {scheduled_dt.strftime('%Y年%m月%d日 %H:%M')}")
+        except:
+            st.markdown(f"**日時:** {meeting['scheduled_at']}")
+
+    st.markdown("---")
+
+    # 参加者リスト
+    with st.expander("👥 参加者一覧"):
+        participants = db.get_meeting_participants(meeting_id)
+        for participant in participants:
+            role_text = "ホスト" if participant['role'] == 'host' else "参加者"
+            st.markdown(f"- {participant['name']} - {role_text}")
+
+    st.markdown("---")
+
+    # 録音・議事録セクション
+    recording = db.get_recording_by_meeting(meeting_id)
+
+    tab1, tab2 = st.tabs(["📝 議事録", "🎤 録音"])
+
+    with tab1:
+        st.markdown("## 議事録")
+
+        if recording and recording['transcript']:
+            st.markdown("### 現在の議事録")
+            st.text_area(
+                "議事録内容",
+                value=recording['transcript'],
+                height=400,
+                key="view_transcript",
+                disabled=True
+            )
+
+            if recording['summary']:
+                st.markdown("### サマリー")
+                st.info(recording['summary'])
+
+            st.markdown("")
+            st.markdown(f"**作成者:** {recording['created_by_name']}")
+            st.markdown(f"**最終更新:** {recording['updated_at']}")
+        else:
+            st.info("まだ議事録が作成されていません")
+
+        # 議事録編集（ホストまたは作成者のみ）
+        if user['role'] == 'host' or (recording and recording['created_by'] == user['id']):
+            st.markdown("---")
+            st.markdown("### 議事録を編集")
+
+            new_transcript = st.text_area(
+                "議事録を入力",
+                value=recording['transcript'] if recording else "",
+                height=300,
+                key="edit_transcript",
+                placeholder="ミーティングの内容を入力してください..."
+            )
+
+            new_summary = st.text_area(
+                "サマリー（要約）",
+                value=recording['summary'] if recording and recording['summary'] else "",
+                height=150,
+                key="edit_summary",
+                placeholder="ミーティングの要点をまとめてください..."
+            )
+
+            if st.button("議事録を保存", type="primary"):
+                success, message, _ = db.save_recording(meeting_id, None, new_transcript, user['id'])
+                if success and new_summary:
+                    db.update_recording_summary(meeting_id, new_summary)
+
+                if success:
+                    st.success("議事録を保存しました")
+                    st.rerun()
+                else:
+                    st.error(message)
+
+    with tab2:
+        st.markdown("## 録音")
+        st.markdown("")
+
+        # 録音ファイルの表示（将来実装）
+        if recording and recording['audio_file_path']:
+            st.audio(recording['audio_file_path'])
+        else:
+            st.info("録音ファイルはまだアップロードされていません")
+
+        st.markdown("---")
+        st.markdown("### 🎤 ブラウザで録音（準備中）")
+        st.info("ブラウザベースの録音機能は今後のバージョンで実装予定です。現在は手動で議事録を入力してください。")
+
+        # 将来的にはここに録音UIを追加
+        # - 録音開始/停止ボタン
+        # - 録音した音声のプレビュー
+        # - 文字起こし（Whisper API連携）
+
+    st.markdown("---")
+
+    if st.button("← ミーティング一覧に戻る"):
+        st.session_state.page = 'meetings'
+        st.rerun()
+
 # サイドバー
 def show_sidebar():
     with st.sidebar:
@@ -628,6 +874,10 @@ def show_sidebar():
             st.session_state.page = 'groups'
             st.rerun()
 
+        if st.button("📹 ミーティング", key="nav_meetings", use_container_width=True):
+            st.session_state.page = 'meetings'
+            st.rerun()
+
         st.markdown("---")
 
         if st.button("🚪 ログアウト", key="logout", use_container_width=True):
@@ -648,6 +898,10 @@ def main():
             show_checklist_page()
         elif st.session_state.page == 'groups':
             show_groups_page()
+        elif st.session_state.page == 'meetings':
+            show_meetings_page()
+        elif st.session_state.page == 'meeting_detail':
+            show_meeting_detail_page()
 
 if __name__ == "__main__":
     main()
