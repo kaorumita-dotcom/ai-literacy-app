@@ -861,14 +861,32 @@ def show_meeting_detail_page():
                             if "OPENAI_API_KEY" in message:
                                 st.markdown("---")
                                 st.markdown("### 📌 APIキーの設定方法")
-                                st.markdown("""
-                                1. プロジェクトのルートディレクトリに `.env` ファイルを作成
-                                2. 以下の内容を記入してください:
-                                ```
-                                OPENAI_API_KEY=your_api_key_here
-                                ```
-                                3. OpenAI APIキーは [platform.openai.com](https://platform.openai.com/api-keys) で取得できます
-                                """)
+
+                                tab_local, tab_cloud = st.tabs(["ローカル環境", "Streamlit Cloud"])
+
+                                with tab_local:
+                                    st.markdown("""
+                                    **ローカルで実行する場合：**
+                                    1. プロジェクトのルートディレクトリに `.env` ファイルを作成
+                                    2. 以下の内容を記入してください:
+                                    ```
+                                    OPENAI_API_KEY=your_api_key_here
+                                    ```
+                                    3. OpenAI APIキーは [platform.openai.com](https://platform.openai.com/api-keys) で取得できます
+                                    """)
+
+                                with tab_cloud:
+                                    st.markdown("""
+                                    **Streamlit Cloudで実行する場合：**
+                                    1. Streamlit Cloudのダッシュボードでアプリを選択
+                                    2. "Settings" → "Secrets" を開く
+                                    3. 以下の内容を追加してください:
+                                    ```
+                                    OPENAI_API_KEY = "your_api_key_here"
+                                    ```
+                                    4. "Save" をクリック
+                                    5. OpenAI APIキーは [platform.openai.com](https://platform.openai.com/api-keys) で取得できます
+                                    """)
 
             st.markdown("---")
 
@@ -1129,14 +1147,32 @@ def show_meeting_detail_page():
                                 if "OPENAI_API_KEY" in message:
                                     st.markdown("---")
                                     st.markdown("### 📌 APIキーの設定方法")
-                                    st.markdown("""
-                                    1. プロジェクトのルートディレクトリに `.env` ファイルを作成
-                                    2. 以下の内容を記入してください:
-                                    ```
-                                    OPENAI_API_KEY=your_api_key_here
-                                    ```
-                                    3. OpenAI APIキーは [platform.openai.com](https://platform.openai.com/api-keys) で取得できます
-                                    """)
+
+                                    tab_local, tab_cloud = st.tabs(["ローカル環境", "Streamlit Cloud"])
+
+                                    with tab_local:
+                                        st.markdown("""
+                                        **ローカルで実行する場合：**
+                                        1. プロジェクトのルートディレクトリに `.env` ファイルを作成
+                                        2. 以下の内容を記入してください:
+                                        ```
+                                        OPENAI_API_KEY=your_api_key_here
+                                        ```
+                                        3. OpenAI APIキーは [platform.openai.com](https://platform.openai.com/api-keys) で取得できます
+                                        """)
+
+                                    with tab_cloud:
+                                        st.markdown("""
+                                        **Streamlit Cloudで実行する場合：**
+                                        1. Streamlit Cloudのダッシュボードでアプリを選択
+                                        2. "Settings" → "Secrets" を開く
+                                        3. 以下の内容を追加してください:
+                                        ```
+                                        OPENAI_API_KEY = "your_api_key_here"
+                                        ```
+                                        4. "Save" をクリック
+                                        5. OpenAI APIキーは [platform.openai.com](https://platform.openai.com/api-keys) で取得できます
+                                        """)
         else:
             st.info("音声ファイルのアップロードはホストのみが行えます")
 

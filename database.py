@@ -16,6 +16,24 @@ load_dotenv()
 
 DB_FILE = "ai_literacy.db"
 
+def get_openai_api_key() -> Optional[str]:
+    """
+    OpenAI APIキーを取得
+    優先順位：
+    1. st.secrets (Streamlit Cloud用)
+    2. os.environ (ローカル.env用)
+    """
+    # Streamlit Cloudの場合
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'OPENAI_API_KEY' in st.secrets:
+            return st.secrets['OPENAI_API_KEY']
+    except (ImportError, Exception):
+        pass
+
+    # ローカル環境の場合
+    return os.getenv('OPENAI_API_KEY')
+
 def get_connection():
     """データベース接続を取得"""
     conn = sqlite3.connect(DB_FILE)
@@ -893,10 +911,10 @@ def transcribe_audio_with_whisper(audio_file_path: str) -> Tuple[bool, str, Opti
         (成功, メッセージ, 文字起こしテキスト)
     """
     try:
-        # APIキーを環境変数から取得
-        api_key = os.getenv('OPENAI_API_KEY')
+        # APIキーを取得（Streamlit Cloud優先）
+        api_key = get_openai_api_key()
         if not api_key:
-            return False, "OPENAI_API_KEYが設定されていません。.envファイルを確認してください。", None
+            return False, "OPENAI_API_KEYが設定されていません。Streamlit Cloudの場合はSecretsに、ローカルの場合は.envファイルに設定してください。", None
 
         # OpenAIクライアントを初期化
         client = OpenAI(api_key=api_key)
@@ -987,10 +1005,10 @@ def generate_minutes_with_gpt4o(transcript: str) -> Tuple[bool, str, Optional[st
         (成功, メッセージ, 整形された議事録)
     """
     try:
-        # APIキーを環境変数から取得
-        api_key = os.getenv('OPENAI_API_KEY')
+        # APIキーを取得（Streamlit Cloud優先）
+        api_key = get_openai_api_key()
         if not api_key:
-            return False, "OPENAI_API_KEYが設定されていません。.envファイルを確認してください。", None
+            return False, "OPENAI_API_KEYが設定されていません。Streamlit Cloudの場合はSecretsに、ローカルの場合は.envファイルに設定してください。", None
 
         # OpenAIクライアントを初期化
         client = OpenAI(api_key=api_key)
