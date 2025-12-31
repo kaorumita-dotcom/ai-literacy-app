@@ -976,6 +976,109 @@ def save_audio_and_transcribe(meeting_id: int, audio_file, created_by: int) -> T
     except Exception as e:
         return False, f"処理中にエラーが発生しました: {str(e)}", None
 
+def generate_minutes_with_gpt4o(transcript: str) -> Tuple[bool, str, Optional[str]]:
+    """
+    GPT-4oを使って文字起こしから議事録を自動生成
+
+    Args:
+        transcript: 文字起こしテキスト
+
+    Returns:
+        (成功, メッセージ, 整形された議事録)
+    """
+    try:
+        # APIキーを環境変数から取得
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            return False, "OPENAI_API_KEYが設定されていません。.envファイルを確認してください。", None
+
+        # OpenAIクライアントを初期化
+        client = OpenAI(api_key=api_key)
+
+        # プロンプトを構築（シニア向けにわかりやすく）
+        prompt = f"""
+以下は会議の文字起こしテキストです。このテキストから、高齢者にもわかりやすい議事録を作成してください。
+
+【文字起こし】
+{transcript}
+
+【議事録フォーマット】
+以下の形式で議事録を作成してください：
+
+## 📝 会議の要約
+（会議の内容を3-5文で簡潔にまとめてください。高齢者にもわかりやすい言葉を使用してください。）
+
+## 📌 主要なトピック
+- （重要なトピック1）
+- （重要なトピック2）
+- （重要なトピック3）
+（必要に応じて追加してください）
+
+## ✅ 決定事項
+- （決定事項1）
+- （決定事項2）
+（決定事項がない場合は「特になし」と記載してください）
+
+## 🔄 次回への申し送り事項
+- （申し送り事項1）
+- （申し送り事項2）
+（申し送り事項がない場合は「特になし」と記載してください）
+
+重要：
+- 専門用語は避け、平易な日本語を使用してください
+- 箇条書きは簡潔にまとめてください
+- 高齢者の方々が読みやすいように配慮してください
+"""
+
+        # GPT-4oで議事録を生成
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "あなたは高齢者向けのAI学習会の議事録作成アシスタントです。わかりやすく、丁寧な言葉で議事録を作成してください。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=2000
+        )
+
+        formatted_minutes = response.choices[0].message.content.strip()
+
+        return True, "議事録の生成が完了しました", formatted_minutes
+
+    except Exception as e:
+        error_msg = str(e)
+        if "api_key" in error_msg.lower():
+            return False, "OpenAI APIキーが無効です。.envファイルを確認してください。", None
+        return False, f"議事録生成中にエラーが発生しました: {error_msg}", None
+
+def save_formatted_minutes(meeting_id: int, formatted_minutes: str) -> Tuple[bool, str]:
+    """
+    整形された議事録をデータベースに保存
+
+    Args:
+        meeting_id: ミーティングID
+        formatted_minutes: 整形された議事録
+
+    Returns:
+        (成功, メッセージ)
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE recordings
+            SET summary = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE meeting_id = ?
+        """, (formatted_minutes, meeting_id))
+
+        conn.commit()
+        conn.close()
+
+        return True, "議事録を保存しました"
+    except Exception as e:
+        return False, f"エラーが発生しました: {str(e)}"
+
 # データベース初期化
 if __name__ == "__main__":
     init_database()

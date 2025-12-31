@@ -833,27 +833,96 @@ def show_meeting_detail_page():
     tab1, tab2, tab3, tab4 = st.tabs(["📝 議事録", "🤖 AIに質問", "📚 学んだこと", "🎤 録音"])
 
     with tab1:
-        st.markdown("## 議事録")
+        st.markdown("## 📝 議事録")
 
         if recording and recording['transcript']:
-            st.markdown("### 現在の議事録")
-            st.text_area(
-                "議事録内容",
-                value=recording['transcript'],
-                height=400,
-                key="view_transcript",
-                disabled=True
-            )
+            # AIによる議事録生成セクション
+            st.markdown("### 🤖 AI議事録の自動生成")
+            st.markdown("文字起こし結果から、AIが自動的に見やすい議事録を生成します。")
+            st.markdown("")
 
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                if st.button("✨ 議事録を自動生成する", type="primary", key="generate_minutes_btn"):
+                    with st.spinner("🤖 AIが議事録を生成中です。少々お待ちください..."):
+                        success, message, formatted_minutes = db.generate_minutes_with_gpt4o(recording['transcript'])
+
+                        if success:
+                            # 生成された議事録を保存
+                            save_success, save_message = db.save_formatted_minutes(meeting_id, formatted_minutes)
+
+                            if save_success:
+                                st.success("✅ 議事録の生成が完了しました！")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ 保存エラー: {save_message}")
+                        else:
+                            st.error(f"❌ {message}")
+                            if "OPENAI_API_KEY" in message:
+                                st.markdown("---")
+                                st.markdown("### 📌 APIキーの設定方法")
+                                st.markdown("""
+                                1. プロジェクトのルートディレクトリに `.env` ファイルを作成
+                                2. 以下の内容を記入してください:
+                                ```
+                                OPENAI_API_KEY=your_api_key_here
+                                ```
+                                3. OpenAI APIキーは [platform.openai.com](https://platform.openai.com/api-keys) で取得できます
+                                """)
+
+            st.markdown("---")
+
+            # 生成された議事録の表示
             if recording['summary']:
-                st.markdown("### サマリー")
-                st.info(recording['summary'])
+                st.markdown("### 📋 生成された議事録")
+
+                # 高齢者向けの見やすいスタイルで表示
+                st.markdown(f"""
+                <div style="
+                    background-color: #f8f9fa;
+                    padding: 30px;
+                    border-radius: 15px;
+                    border: 3px solid #007bff;
+                    font-size: 20px;
+                    line-height: 1.8;
+                    color: #212529;
+                ">
+                {recording['summary'].replace('\n', '<br>')}
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("")
+
+                # ダウンロードボタン
+                from datetime import datetime
+                download_filename = f"議事録_{meeting['title']}_{datetime.now().strftime('%Y%m%d')}.txt"
+
+                st.download_button(
+                    label="📥 議事録をダウンロード",
+                    data=recording['summary'],
+                    file_name=download_filename,
+                    mime="text/plain",
+                    key="download_minutes"
+                )
+
+                st.markdown("---")
+
+            # 元の文字起こしテキスト
+            st.markdown("### 📄 文字起こしテキスト（元データ）")
+            with st.expander("文字起こしテキストを表示"):
+                st.text_area(
+                    "文字起こし内容",
+                    value=recording['transcript'],
+                    height=300,
+                    key="view_transcript",
+                    disabled=True
+                )
 
             st.markdown("")
             st.markdown(f"**作成者:** {recording['created_by_name']}")
             st.markdown(f"**最終更新:** {recording['updated_at']}")
         else:
-            st.info("まだ議事録が作成されていません")
+            st.info("まだ議事録が作成されていません。録音タブから音声ファイルをアップロードしてください。")
 
         # 議事録編集（ホストまたは作成者のみ）
         if user['role'] == 'host' or (recording and recording['created_by'] == user['id']):
@@ -1032,6 +1101,27 @@ def show_meeting_detail_page():
                                     disabled=True,
                                     key="transcription_result"
                                 )
+                                st.markdown("")
+
+                                # 次のステップへの案内（高齢者向けに大きく表示）
+                                st.markdown("""
+                                <div style="
+                                    background-color: #d1ecf1;
+                                    padding: 25px;
+                                    border-radius: 15px;
+                                    border: 3px solid #17a2b8;
+                                    margin: 20px 0;
+                                ">
+                                    <h3 style="color: #0c5460; font-size: 28px; margin-bottom: 15px;">🎯 次のステップ</h3>
+                                    <p style="font-size: 22px; line-height: 1.8; color: #0c5460; margin: 0;">
+                                        文字起こしが完了しました！<br>
+                                        <strong>「📝 議事録」タブ</strong>に移動して、<br>
+                                        <strong>「✨ 議事録を自動生成する」</strong>ボタンを押してください。<br>
+                                        AIが見やすい議事録を自動的に作成します。
+                                    </p>
+                                </div>
+                                """, unsafe_allow_html=True)
+
                                 st.info("💡 議事録タブで編集・確認できます")
                                 st.rerun()
                             else:
