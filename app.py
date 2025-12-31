@@ -1,7 +1,6 @@
 import streamlit as st
-import json
-import os
-from pathlib import Path
+import database as db
+from datetime import datetime
 
 # ページ設定
 st.set_page_config(
@@ -10,8 +9,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# データファイルのパス
-DATA_FILE = "checklist_data.json"
+# データベース初期化
+db.init_database()
 
 # チェックリストデータ
 CHECKLIST_CATEGORIES = {
@@ -121,13 +120,13 @@ st.markdown("""
     }
 
     /* メトリクスを大きく */
-    .stMetric label {
-        font-size: 24px !important;
+    [data-testid="stMetricValue"] {
+        font-size: 48px !important;
         font-weight: bold !important;
     }
 
-    .stMetric .metric-value {
-        font-size: 48px !important;
+    [data-testid="stMetricLabel"] {
+        font-size: 24px !important;
         font-weight: bold !important;
     }
 
@@ -159,40 +158,57 @@ st.markdown("""
         margin-bottom: 40px;
         border: 3px solid #adb5bd;
     }
+
+    /* サイドバーのスタイル */
+    [data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+    }
+
+    /* 入力フィールドを大きく */
+    .stTextInput input, .stTextArea textarea, .stSelectbox select {
+        font-size: 20px !important;
+        padding: 12px !important;
+        min-height: 50px !important;
+    }
+
+    .stTextInput label, .stTextArea label, .stSelectbox label {
+        font-size: 22px !important;
+        font-weight: bold !important;
+    }
+
+    /* テーブルのスタイル */
+    .dataframe {
+        font-size: 20px !important;
+    }
+
+    /* グループカード */
+    .group-card {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        border: 2px solid #dee2e6;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# データの読み込み
-def load_data():
-    """JSONファイルからチェック状態を読み込む"""
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
-
-# データの保存
-def save_data(data):
-    """JSONファイルにチェック状態を保存する"""
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, indent=2, ensure_ascii=False, fp=f)
-
-# 初期化
-if 'checklist' not in st.session_state:
-    st.session_state.checklist = load_data()
+# セッション状態の初期化
+if 'user' not in st.session_state:
+    st.session_state.user = None
+if 'page' not in st.session_state:
+    st.session_state.page = 'dashboard'
 
 # 進捗計算
-def calculate_progress():
+def calculate_progress(checklist_data):
     """全体の進捗とカテゴリごとの進捗を計算"""
     total_items = sum(len(items) for items in CHECKLIST_CATEGORIES.values())
-    checked_items = sum(1 for item in st.session_state.checklist.values() if item)
+    checked_items = sum(1 for item in checklist_data.values() if item)
 
     category_progress = {}
     for category, items in CHECKLIST_CATEGORIES.items():
         category_total = len(items)
-        category_checked = sum(1 for item in items if st.session_state.checklist.get(f"{category}_{item}", False))
+        category_checked = sum(1 for item in items if checklist_data.get(f"{category}_{item}", False))
         category_progress[category] = {
             'checked': category_checked,
             'total': category_total,
@@ -208,13 +224,188 @@ def calculate_progress():
         'categories': category_progress
     }
 
-# メインアプリ
-def main():
+# ログイン・登録画面
+def show_auth_page():
+    st.title("✅ AI学習チェックリスト")
+    st.markdown("### シニアのためのAI活用ガイド")
+    st.markdown("---")
+
+    tab1, tab2 = st.tabs(["ログイン", "新規登録"])
+
+    with tab1:
+        st.markdown("## ログイン")
+        st.markdown("")
+
+        email = st.text_input("メールアドレス", key="login_email")
+        password = st.text_input("パスワード", type="password", key="login_password")
+
+        st.markdown("")
+
+        if st.button("ログイン", key="login_button", type="primary"):
+            if email and password:
+                user = db.authenticate_user(email, password)
+                if user:
+                    st.session_state.user = user
+                    st.success("ログインしました！")
+                    st.rerun()
+                else:
+                    st.error("メールアドレスまたはパスワードが間違っています")
+            else:
+                st.warning("メールアドレスとパスワードを入力してください")
+
+    with tab2:
+        st.markdown("## 新規登録")
+        st.markdown("")
+
+        name = st.text_input("お名前", key="register_name")
+        email = st.text_input("メールアドレス", key="register_email")
+        password = st.text_input("パスワード", type="password", key="register_password")
+        password_confirm = st.text_input("パスワード（確認）", type="password", key="register_password_confirm")
+        role = st.selectbox(
+            "役割を選択",
+            options=["participant", "host"],
+            format_func=lambda x: "参加者（学習する人）" if x == "participant" else "ホスト（教える人・グループを作る人）",
+            key="register_role"
+        )
+
+        st.markdown("")
+
+        if st.button("登録する", key="register_button", type="primary"):
+            if not all([name, email, password, password_confirm]):
+                st.warning("すべての項目を入力してください")
+            elif password != password_confirm:
+                st.error("パスワードが一致しません")
+            elif len(password) < 6:
+                st.warning("パスワードは6文字以上にしてください")
+            else:
+                success, message = db.create_user(name, email, password, role)
+                if success:
+                    st.success(message)
+                    st.info("ログインタブからログインしてください")
+                else:
+                    st.error(message)
+
+# ダッシュボード
+def show_dashboard():
+    user = st.session_state.user
+
+    st.title(f"👋 こんにちは、{user['name']}さん")
+    st.markdown(f"**役割:** {'ホスト（教える人）' if user['role'] == 'host' else '参加者（学習する人）'}")
+    st.markdown("---")
+
+    # チェックリスト進捗
+    checklist_data = db.load_user_checklist(user['id'])
+    progress = calculate_progress(checklist_data)
+
+    st.markdown('<div class="progress-area">', unsafe_allow_html=True)
+    st.markdown("## 📊 あなたの学習進捗")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            label="達成項目",
+            value=f"{progress['checked']} / {progress['total']}"
+        )
+
+    with col2:
+        st.metric(
+            label="達成率",
+            value=f"{progress['percentage']:.1f}%"
+        )
+
+    with col3:
+        completed_categories = sum(1 for cat_prog in progress['categories'].values() if cat_prog['percentage'] == 100)
+        st.metric(
+            label="完了カテゴリ",
+            value=f"{completed_categories} / {len(CHECKLIST_CATEGORIES)}"
+        )
+
+    st.progress(progress['percentage'] / 100)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # グループ情報
+    st.markdown("## 👥 所属グループ")
+
+    groups = db.get_groups_by_member(user['id'])
+
+    if groups:
+        for group in groups:
+            st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
+            st.markdown(f"### 📁 {group['name']}")
+            if group['description']:
+                st.markdown(f"**説明:** {group['description']}")
+            st.markdown(f"**ホスト:** {group['host_name']}")
+            st.markdown(f"**メンバー数:** {group['member_count']}名")
+            st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.info("まだグループに参加していません")
+
+    st.markdown("---")
+
+    # ホストの場合、自分が作成したグループを表示
+    if user['role'] == 'host':
+        st.markdown("## 🎯 あなたが管理しているグループ")
+
+        hosted_groups = db.get_groups_by_host(user['id'])
+
+        if hosted_groups:
+            for group in hosted_groups:
+                st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
+                st.markdown(f"### 📁 {group['name']}")
+                if group['description']:
+                    st.markdown(f"**説明:** {group['description']}")
+                st.markdown(f"**メンバー数:** {group['member_count']}名")
+                st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.info("まだグループを作成していません")
+
+    # 招待通知
+    invitations = db.get_user_invitations(user['email'])
+    if invitations:
+        st.markdown("---")
+        st.markdown("## 📧 グループへの招待")
+
+        for invitation in invitations:
+            st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
+            st.markdown(f"### {invitation['group_name']}")
+            st.markdown(f"**説明:** {invitation['description']}")
+            st.markdown(f"**招待者:** {invitation['invited_by_name']}")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(f"参加する", key=f"accept_{invitation['id']}"):
+                    success, message = db.accept_invitation(invitation['id'], user['id'])
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+            with col2:
+                if st.button(f"辞退する", key=f"decline_{invitation['id']}"):
+                    success, message = db.decline_invitation(invitation['id'])
+                    if success:
+                        st.info(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+# チェックリストページ
+def show_checklist_page():
+    user = st.session_state.user
+
     st.title("✅ AI学習チェックリスト")
     st.markdown("### シニアのためのAI活用ガイド")
 
+    # ユーザーのチェックリストを読み込み
+    checklist_data = db.load_user_checklist(user['id'])
+
     # 進捗表示
-    progress = calculate_progress()
+    progress = calculate_progress(checklist_data)
 
     st.markdown('<div class="progress-area">', unsafe_allow_html=True)
     st.markdown("## 📊 学習の進捗")
@@ -240,7 +431,6 @@ def main():
             value=f"{completed_categories} / {len(CHECKLIST_CATEGORIES)}"
         )
 
-    # プログレスバー
     st.progress(progress['percentage'] / 100)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -270,35 +460,22 @@ def main():
 
         # チェックボックス
         for item in items:
-            key = f"{category}_{item}"
-            checked = st.session_state.checklist.get(key, False)
+            item_id = f"{category}_{item}"
+            checked = checklist_data.get(item_id, False)
 
-            if st.checkbox(item, value=checked, key=key):
-                st.session_state.checklist[key] = True
-                save_data(st.session_state.checklist)
-            else:
-                st.session_state.checklist[key] = False
-                save_data(st.session_state.checklist)
+            new_checked = st.checkbox(item, value=checked, key=item_id)
+
+            if new_checked != checked:
+                db.save_checklist_item(user['id'], item_id, new_checked)
+                st.rerun()
 
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown("")
 
     st.markdown("---")
 
-    # リセットボタン
-    st.markdown("### 🔄 データ管理")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("すべてリセット", type="secondary"):
-            st.session_state.checklist = {}
-            save_data({})
-            st.rerun()
-
-    with col2:
-        if progress['percentage'] == 100:
-            st.success("🎉 おめでとうございます！すべての項目を達成しました！")
+    if progress['percentage'] == 100:
+        st.success("🎉 おめでとうございます！すべての項目を達成しました！")
 
     # フッター
     st.markdown("---")
@@ -308,6 +485,169 @@ def main():
             わからないことがあれば、いつでも周りの人に聞いてくださいね。
         </div>
     """, unsafe_allow_html=True)
+
+# グループ管理ページ
+def show_groups_page():
+    user = st.session_state.user
+
+    st.title("👥 グループ管理")
+    st.markdown("---")
+
+    if user['role'] == 'host':
+        # ホストの場合：グループ作成とグループ管理
+        tab1, tab2 = st.tabs(["グループ作成", "管理中のグループ"])
+
+        with tab1:
+            st.markdown("## 新しいグループを作成")
+            st.markdown("")
+
+            group_name = st.text_input("グループ名", key="new_group_name")
+            group_description = st.text_area("グループの説明", key="new_group_description", height=150)
+
+            st.markdown("")
+
+            if st.button("グループを作成", type="primary"):
+                if group_name:
+                    success, message, group_id = db.create_group(group_name, group_description, user['id'])
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+                else:
+                    st.warning("グループ名を入力してください")
+
+        with tab2:
+            st.markdown("## 管理中のグループ")
+            st.markdown("")
+
+            groups = db.get_groups_by_host(user['id'])
+
+            if groups:
+                for group in groups:
+                    st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
+                    st.markdown(f"### 📁 {group['name']}")
+                    if group['description']:
+                        st.markdown(f"**説明:** {group['description']}")
+                    st.markdown(f"**メンバー数:** {group['member_count']}名")
+
+                    # メンバー表示
+                    with st.expander("メンバー一覧を見る"):
+                        members = db.get_group_members(group['id'])
+                        for member in members:
+                            role_text = "ホスト" if member['role'] == 'host' else "参加者"
+                            st.markdown(f"- {member['name']} ({member['email']}) - {role_text}")
+
+                    # メンバー招待
+                    with st.expander("メンバーを招待する"):
+                        invite_email = st.text_input(
+                            "招待するメールアドレス",
+                            key=f"invite_email_{group['id']}"
+                        )
+                        if st.button("招待を送る", key=f"invite_button_{group['id']}"):
+                            if invite_email:
+                                success, message = db.invite_to_group(group['id'], invite_email, user['id'])
+                                if success:
+                                    st.success(message)
+                                else:
+                                    st.error(message)
+                            else:
+                                st.warning("メールアドレスを入力してください")
+
+                    # グループメンバーの進捗表示
+                    with st.expander("メンバーの学習進捗を見る"):
+                        progress_data = db.get_group_progress(group['id'])
+                        if progress_data:
+                            for member_progress in progress_data:
+                                completed = member_progress['completed_items']
+                                total = 30  # 全チェックリスト項目数
+                                percentage = (completed / total * 100) if total > 0 else 0
+
+                                st.markdown(f"**{member_progress['name']}**")
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    st.progress(percentage / 100)
+                                with col2:
+                                    st.markdown(f"{completed}/{total} 項目")
+                                st.markdown("")
+
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown("")
+            else:
+                st.info("まだグループを作成していません")
+
+    else:
+        # 参加者の場合：所属グループの表示
+        st.markdown("## あなたが参加しているグループ")
+        st.markdown("")
+
+        groups = db.get_groups_by_member(user['id'])
+
+        if groups:
+            for group in groups:
+                st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
+                st.markdown(f"### 📁 {group['name']}")
+                if group['description']:
+                    st.markdown(f"**説明:** {group['description']}")
+                st.markdown(f"**ホスト:** {group['host_name']}")
+                st.markdown(f"**メンバー数:** {group['member_count']}名")
+
+                # メンバー表示
+                with st.expander("メンバー一覧を見る"):
+                    members = db.get_group_members(group['id'])
+                    for member in members:
+                        role_text = "ホスト" if member['role'] == 'host' else "参加者"
+                        st.markdown(f"- {member['name']} - {role_text}")
+
+                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown("")
+        else:
+            st.info("まだグループに参加していません")
+
+# サイドバー
+def show_sidebar():
+    with st.sidebar:
+        user = st.session_state.user
+
+        st.markdown(f"### 👤 {user['name']}")
+        st.markdown(f"**{user['email']}**")
+        st.markdown(f"**役割:** {'ホスト' if user['role'] == 'host' else '参加者'}")
+        st.markdown("---")
+
+        st.markdown("### 📋 メニュー")
+
+        if st.button("🏠 ダッシュボード", key="nav_dashboard", use_container_width=True):
+            st.session_state.page = 'dashboard'
+            st.rerun()
+
+        if st.button("✅ チェックリスト", key="nav_checklist", use_container_width=True):
+            st.session_state.page = 'checklist'
+            st.rerun()
+
+        if st.button("👥 グループ", key="nav_groups", use_container_width=True):
+            st.session_state.page = 'groups'
+            st.rerun()
+
+        st.markdown("---")
+
+        if st.button("🚪 ログアウト", key="logout", use_container_width=True):
+            st.session_state.user = None
+            st.session_state.page = 'dashboard'
+            st.rerun()
+
+# メインアプリ
+def main():
+    if st.session_state.user is None:
+        show_auth_page()
+    else:
+        show_sidebar()
+
+        if st.session_state.page == 'dashboard':
+            show_dashboard()
+        elif st.session_state.page == 'checklist':
+            show_checklist_page()
+        elif st.session_state.page == 'groups':
+            show_groups_page()
 
 if __name__ == "__main__":
     main()
