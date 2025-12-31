@@ -6,6 +6,9 @@
 import sqlite3
 import hashlib
 import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple
 from dotenv import load_dotenv
@@ -1096,6 +1099,226 @@ def save_formatted_minutes(meeting_id: int, formatted_minutes: str) -> Tuple[boo
         return True, "議事録を保存しました"
     except Exception as e:
         return False, f"エラーが発生しました: {str(e)}"
+
+# メール送信関連の関数
+
+def get_email_config() -> Tuple[Optional[str], Optional[str]]:
+    """
+    メール設定を取得
+    優先順位：
+    1. st.secrets (Streamlit Cloud用)
+    2. os.environ (ローカル.env用)
+
+    Returns:
+        (メールアドレス, アプリパスワード)
+    """
+    email_address = None
+    email_password = None
+
+    # Streamlit Cloudの場合
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets'):
+            if 'EMAIL_ADDRESS' in st.secrets:
+                email_address = st.secrets['EMAIL_ADDRESS']
+            if 'EMAIL_PASSWORD' in st.secrets:
+                email_password = st.secrets['EMAIL_PASSWORD']
+    except (ImportError, Exception):
+        pass
+
+    # ローカル環境の場合（未設定の場合のみ）
+    if not email_address:
+        email_address = os.getenv('EMAIL_ADDRESS')
+    if not email_password:
+        email_password = os.getenv('EMAIL_PASSWORD')
+
+    return email_address, email_password
+
+def send_minutes_email(
+    meeting_id: int,
+    meeting_title: str,
+    scheduled_at: str,
+    minutes_content: str,
+    recipients: List[Dict]
+) -> Tuple[bool, str, List[str], List[str]]:
+    """
+    議事録をメールで参加者に送信
+
+    Args:
+        meeting_id: ミーティングID
+        meeting_title: ミーティングタイトル
+        scheduled_at: 開催日時
+        minutes_content: 議事録の内容
+        recipients: 送信先リスト [{'name': '名前', 'email': 'メールアドレス'}, ...]
+
+    Returns:
+        (成功, メッセージ, 送信成功リスト, 送信失敗リスト)
+    """
+    # メール設定を取得
+    sender_email, sender_password = get_email_config()
+
+    if not sender_email or not sender_password:
+        return False, "メール設定が見つかりません。EMAIL_ADDRESS と EMAIL_PASSWORD を設定してください。", [], []
+
+    # 日時の整形
+    try:
+        dt = datetime.fromisoformat(scheduled_at)
+        formatted_date = dt.strftime('%Y年%m月%d日 %H:%M')
+    except:
+        formatted_date = scheduled_at
+
+    # 送信結果を追跡
+    success_list = []
+    failed_list = []
+
+    # Gmail SMTPサーバーに接続
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+    except smtplib.SMTPAuthenticationError:
+        return False, "メールの認証に失敗しました。EMAIL_ADDRESS と EMAIL_PASSWORD（Gmailアプリパスワード）を確認してください。", [], []
+    except Exception as e:
+        return False, f"メールサーバーへの接続に失敗しました: {str(e)}", [], []
+
+    # 各受信者にメールを送信
+    for recipient in recipients:
+        try:
+            # メールを作成
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"【議事録】{meeting_title}"
+            msg['From'] = sender_email
+            msg['To'] = recipient['email']
+
+            # プレーンテキスト版のメール本文（高齢者向けにわかりやすく）
+            text_body = f"""
+{recipient['name']} 様
+
+お疲れ様です。
+以下のミーティングの議事録をお送りいたします。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📅 ミーティング名：{meeting_title}
+📆 開催日時：{formatted_date}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{minutes_content}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+このメールは自動送信されています。
+ご不明な点がございましたら、ホストにお問い合わせください。
+
+AI学習チェックリスト
+            """
+
+            # HTML版のメール本文（より見やすいフォーマット）
+            html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{
+            font-family: 'メイリオ', 'ヒラギノ角ゴ Pro W3', sans-serif;
+            font-size: 18px;
+            line-height: 1.8;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }}
+        .header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }}
+        .header h1 {{
+            margin: 0;
+            font-size: 28px;
+        }}
+        .meeting-info {{
+            background-color: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            border-left: 5px solid #007bff;
+            margin-bottom: 30px;
+        }}
+        .meeting-info p {{
+            margin: 10px 0;
+            font-size: 20px;
+        }}
+        .minutes-content {{
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 15px;
+            border: 2px solid #dee2e6;
+            margin-bottom: 30px;
+        }}
+        .footer {{
+            text-align: center;
+            color: #6c757d;
+            font-size: 16px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📝 議事録のお知らせ</h1>
+    </div>
+
+    <p style="font-size: 22px;"><strong>{recipient['name']}</strong> 様</p>
+    <p>お疲れ様です。<br>以下のミーティングの議事録をお送りいたします。</p>
+
+    <div class="meeting-info">
+        <p>📅 <strong>ミーティング名：</strong>{meeting_title}</p>
+        <p>📆 <strong>開催日時：</strong>{formatted_date}</p>
+    </div>
+
+    <div class="minutes-content">
+        {minutes_content.replace(chr(10), '<br>')}
+    </div>
+
+    <div class="footer">
+        <p>このメールは自動送信されています。<br>
+        ご不明な点がございましたら、ホストにお問い合わせください。</p>
+        <p><strong>AI学習チェックリスト</strong></p>
+    </div>
+</body>
+</html>
+            """
+
+            # プレーンテキストとHTMLを追加
+            part1 = MIMEText(text_body, 'plain', 'utf-8')
+            part2 = MIMEText(html_body, 'html', 'utf-8')
+            msg.attach(part1)
+            msg.attach(part2)
+
+            # メール送信
+            server.send_message(msg)
+            success_list.append(recipient['email'])
+
+        except Exception as e:
+            failed_list.append(f"{recipient['email']} ({str(e)})")
+
+    # サーバー接続を閉じる
+    server.quit()
+
+    # 結果メッセージを作成
+    if len(failed_list) == 0:
+        result_message = f"✅ {len(success_list)}名全員にメールを送信しました！"
+        return True, result_message, success_list, failed_list
+    elif len(success_list) == 0:
+        result_message = f"❌ メールの送信に失敗しました"
+        return False, result_message, success_list, failed_list
+    else:
+        result_message = f"⚠️ {len(success_list)}名に送信成功、{len(failed_list)}名に送信失敗"
+        return True, result_message, success_list, failed_list
+
 
 # データベース初期化
 if __name__ == "__main__":

@@ -923,6 +923,109 @@ def show_meeting_detail_page():
                     key="download_minutes"
                 )
 
+                st.markdown("")
+
+                # メール送信セクション（高齢者向けUIで大きく表示）
+                st.markdown("""
+                <div style="
+                    background-color: #e8f4fd;
+                    padding: 25px;
+                    border-radius: 15px;
+                    border: 3px solid #2196f3;
+                    margin: 20px 0;
+                ">
+                    <h3 style="color: #1565c0; font-size: 26px; margin-bottom: 15px;">📧 参加者にメールで議事録を送る</h3>
+                    <p style="font-size: 20px; line-height: 1.8; color: #333; margin: 0;">
+                        ミーティングに参加した全員に、議事録をメールで送信できます。<br>
+                        下のボタンを押すと、グループのメンバー全員にメールが届きます。
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # 参加者一覧を取得して表示
+                participants = db.get_meeting_participants(meeting_id)
+
+                if participants:
+                    with st.expander("📋 送信先の確認（クリックして開く）"):
+                        st.markdown("**以下の方々にメールが送信されます：**")
+                        for p in participants:
+                            st.markdown(f"- {p['name']} （{p['email']}）")
+
+                    col_send1, col_send2 = st.columns([2, 1])
+                    with col_send1:
+                        if st.button("📧 参加者全員にメールを送信", type="primary", key="send_email_btn"):
+                            with st.spinner("📤 メールを送信中です。しばらくお待ちください..."):
+                                # 参加者リストを送信用に整形
+                                recipients = [{'name': p['name'], 'email': p['email']} for p in participants]
+
+                                # メール送信
+                                success, message, success_list, failed_list = db.send_minutes_email(
+                                    meeting_id=meeting_id,
+                                    meeting_title=meeting['title'],
+                                    scheduled_at=meeting.get('scheduled_at', ''),
+                                    minutes_content=recording['summary'],
+                                    recipients=recipients
+                                )
+
+                                if success:
+                                    st.success(f"🎉 {message}")
+                                    if success_list:
+                                        st.markdown("**送信成功:**")
+                                        for email in success_list:
+                                            st.markdown(f"- ✅ {email}")
+                                else:
+                                    st.error(f"😢 {message}")
+
+                                    # メール設定がない場合のガイド
+                                    if "メール設定が見つかりません" in message or "認証に失敗" in message:
+                                        st.markdown("---")
+                                        st.markdown("### 📌 メール設定の方法")
+
+                                        tab_email_local, tab_email_cloud = st.tabs(["ローカル環境", "Streamlit Cloud"])
+
+                                        with tab_email_local:
+                                            st.markdown("""
+                                            **ローカルで実行する場合：**
+                                            1. プロジェクトのルートディレクトリの `.env` ファイルを開く
+                                            2. 以下の内容を追加してください:
+                                            ```
+                                            EMAIL_ADDRESS=your_gmail@gmail.com
+                                            EMAIL_PASSWORD=your_app_password
+                                            ```
+                                            3. **重要:** `EMAIL_PASSWORD` には通常のGmailパスワードではなく、
+                                               **Gmailアプリパスワード**を設定してください
+
+                                            **アプリパスワードの取得方法:**
+                                            1. Googleアカウント → セキュリティ → 2段階認証を有効化
+                                            2. セキュリティ → アプリパスワード → 「メール」を選択
+                                            3. 生成された16文字のパスワードを使用
+                                            """)
+
+                                        with tab_email_cloud:
+                                            st.markdown("""
+                                            **Streamlit Cloudで実行する場合：**
+                                            1. Streamlit Cloudのダッシュボードでアプリを選択
+                                            2. "Settings" → "Secrets" を開く
+                                            3. 以下の内容を追加してください:
+                                            ```
+                                            EMAIL_ADDRESS = "your_gmail@gmail.com"
+                                            EMAIL_PASSWORD = "your_app_password"
+                                            ```
+                                            4. "Save" をクリック
+
+                                            **アプリパスワードの取得方法:**
+                                            1. Googleアカウント → セキュリティ → 2段階認証を有効化
+                                            2. セキュリティ → アプリパスワード → 「メール」を選択
+                                            3. 生成された16文字のパスワードを使用
+                                            """)
+
+                                if failed_list:
+                                    st.warning("**送信失敗:**")
+                                    for fail in failed_list:
+                                        st.markdown(f"- ❌ {fail}")
+                else:
+                    st.info("参加者情報が見つかりません")
+
                 st.markdown("---")
 
             # 元の文字起こしテキスト
