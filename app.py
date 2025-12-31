@@ -1,6 +1,7 @@
 import streamlit as st
 import database as db
 from datetime import datetime
+import os
 
 # ページ設定
 st.set_page_config(
@@ -978,23 +979,85 @@ def show_meeting_detail_page():
             st.info("まだ誰も学びを記録していません")
 
     with tab4:
-        st.markdown("## 録音")
+        st.markdown("## 🎤 録音・文字起こし")
         st.markdown("")
 
-        # 録音ファイルの表示（将来実装）
+        # 録音ファイルの表示
         if recording and recording['audio_file_path']:
+            st.markdown("### 📁 保存済み音声ファイル")
             st.audio(recording['audio_file_path'])
+            st.markdown(f"**ファイル:** {os.path.basename(recording['audio_file_path'])}")
         else:
             st.info("録音ファイルはまだアップロードされていません")
 
         st.markdown("---")
-        st.markdown("### 🎤 ブラウザで録音（準備中）")
-        st.info("ブラウザベースの録音機能は今後のバージョンで実装予定です。現在は手動で議事録を入力してください。")
 
-        # 将来的にはここに録音UIを追加
-        # - 録音開始/停止ボタン
-        # - 録音した音声のプレビュー
-        # - 文字起こし（Whisper API連携）
+        # 音声ファイルアップロード機能
+        if user['role'] == 'host' or user['id'] == meeting['host_id']:
+            st.markdown("### 🎙️ 音声ファイルから議事録を作成")
+            st.markdown("音声ファイル（mp3, wav, m4a）をアップロードすると、自動的に文字起こしして議事録を作成します。")
+            st.markdown("")
+
+            audio_file = st.file_uploader(
+                "音声ファイルを選択",
+                type=["mp3", "wav", "m4a"],
+                help="ファイルサイズは25MB以下にしてください",
+                key="audio_upload"
+            )
+
+            if audio_file is not None:
+                # ファイルサイズを表示
+                file_size_mb = len(audio_file.getvalue()) / (1024 * 1024)
+                st.info(f"📊 ファイルサイズ: {file_size_mb:.2f} MB")
+
+                if file_size_mb > 25:
+                    st.error("⚠️ ファイルサイズが25MBを超えています。ファイルを圧縮するか、短い音声ファイルを選択してください。")
+                else:
+                    st.markdown("")
+                    if st.button("🚀 文字起こしを開始", type="primary", key="start_transcription"):
+                        with st.spinner("音声を文字起こし中です。しばらくお待ちください..."):
+                            success, message, transcript = db.save_audio_and_transcribe(
+                                meeting_id,
+                                audio_file,
+                                user['id']
+                            )
+
+                            if success:
+                                st.success(f"✅ {message}")
+                                st.markdown("### 📝 文字起こし結果")
+                                st.text_area(
+                                    "文字起こしされた内容",
+                                    value=transcript,
+                                    height=300,
+                                    disabled=True,
+                                    key="transcription_result"
+                                )
+                                st.info("💡 議事録タブで編集・確認できます")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ エラー: {message}")
+                                if "OPENAI_API_KEY" in message:
+                                    st.markdown("---")
+                                    st.markdown("### 📌 APIキーの設定方法")
+                                    st.markdown("""
+                                    1. プロジェクトのルートディレクトリに `.env` ファイルを作成
+                                    2. 以下の内容を記入してください:
+                                    ```
+                                    OPENAI_API_KEY=your_api_key_here
+                                    ```
+                                    3. OpenAI APIキーは [platform.openai.com](https://platform.openai.com/api-keys) で取得できます
+                                    """)
+        else:
+            st.info("音声ファイルのアップロードはホストのみが行えます")
+
+        st.markdown("---")
+        st.markdown("### 💡 ヒント")
+        st.markdown("""
+        - **対応形式:** mp3, wav, m4a
+        - **ファイルサイズ上限:** 25MB
+        - **言語:** 日本語に最適化されています
+        - **処理時間:** ファイルの長さによって数秒〜数分かかります
+        """)
 
     st.markdown("---")
 

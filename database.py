@@ -8,6 +8,11 @@ import hashlib
 import os
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple
+from dotenv import load_dotenv
+from openai import OpenAI
+
+# 環境変数を読み込み
+load_dotenv()
 
 DB_FILE = "ai_literacy.db"
 
@@ -876,6 +881,100 @@ def get_upcoming_meetings(user_id: int, days_ahead: int = 7) -> List[Dict]:
     meetings = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return meetings
+
+def transcribe_audio_with_whisper(audio_file_path: str) -> Tuple[bool, str, Optional[str]]:
+    """
+    Whisper APIを使って音声ファイルを文字起こし
+
+    Args:
+        audio_file_path: 音声ファイルのパス
+
+    Returns:
+        (成功, メッセージ, 文字起こしテキスト)
+    """
+    try:
+        # APIキーを環境変数から取得
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            return False, "OPENAI_API_KEYが設定されていません。.envファイルを確認してください。", None
+
+        # OpenAIクライアントを初期化
+        client = OpenAI(api_key=api_key)
+
+        # ファイルサイズチェック（25MB = 26,214,400 bytes）
+        file_size = os.path.getsize(audio_file_path)
+        max_size = 25 * 1024 * 1024  # 25MB
+
+        if file_size > max_size:
+            return False, f"ファイルサイズが大きすぎます（上限25MB）。現在のサイズ: {file_size / (1024*1024):.1f}MB", None
+
+        # 音声ファイルを開いて文字起こし
+        with open(audio_file_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language="ja"  # 日本語に指定
+            )
+
+        return True, "文字起こしが完了しました", transcript.text
+
+    except FileNotFoundError:
+        return False, f"音声ファイルが見つかりません: {audio_file_path}", None
+    except Exception as e:
+        error_msg = str(e)
+        if "api_key" in error_msg.lower():
+            return False, "OpenAI APIキーが無効です。.envファイルを確認してください。", None
+        return False, f"文字起こし中にエラーが発生しました: {error_msg}", None
+
+def save_audio_and_transcribe(meeting_id: int, audio_file, created_by: int) -> Tuple[bool, str, Optional[str]]:
+    """
+    音声ファイルを保存してWhisper APIで文字起こし、議事録として保存
+
+    Args:
+        meeting_id: ミーティングID
+        audio_file: Streamlitのアップロードファイルオブジェクト
+        created_by: 作成者のユーザーID
+
+    Returns:
+        (成功, メッセージ, 文字起こしテキスト)
+    """
+    try:
+        # アップロードディレクトリを作成
+        upload_dir = "audio_uploads"
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # ファイル名を生成（ミーティングID + タイムスタンプ + 元のファイル名）
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_extension = os.path.splitext(audio_file.name)[1]
+        safe_filename = f"meeting_{meeting_id}_{timestamp}{file_extension}"
+        file_path = os.path.join(upload_dir, safe_filename)
+
+        # ファイルを保存
+        with open(file_path, "wb") as f:
+            f.write(audio_file.getbuffer())
+
+        # Whisper APIで文字起こし
+        success, message, transcript = transcribe_audio_with_whisper(file_path)
+
+        if not success:
+            # エラーの場合、保存したファイルを削除
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            return False, message, None
+
+        # 議事録としてデータベースに保存
+        save_success, save_message, _ = save_recording(meeting_id, file_path, transcript, created_by)
+
+        if not save_success:
+            # データベース保存失敗の場合、ファイルを削除
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            return False, f"議事録の保存に失敗しました: {save_message}", None
+
+        return True, "音声ファイルの文字起こしと議事録保存が完了しました", transcript
+
+    except Exception as e:
+        return False, f"処理中にエラーが発生しました: {str(e)}", None
 
 # データベース初期化
 if __name__ == "__main__":

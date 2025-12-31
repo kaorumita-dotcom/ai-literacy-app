@@ -44,3 +44,13 @@ Thumbs.db
 
 # Data files (チェックリスト保存ファイル)
 checklist_data.json
+
+# Environment variables
+.env
+
+# Database
+*.db
+
+# Audio uploads
+uploads/
+audio_uploads/
