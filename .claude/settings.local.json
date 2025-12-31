@@ -5,7 +5,13 @@
       "Bash(tree:*)",
       "Bash(python database.py:*)",
       "Bash(streamlit run:*)",
-      "Bash(python -m streamlit:*)"
+      "Bash(python -m streamlit:*)",
+      "Bash(timeout /t 3 /nobreak)",
+      "Bash(exit 0)",
+      "Bash(timeout /t 5 /nobreak)",
+      "Bash(sqlite3:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)"
     ]
   }
 }

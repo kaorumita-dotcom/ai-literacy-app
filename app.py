@@ -1078,49 +1078,165 @@ def show_meeting_detail_page():
                     st.error(message)
 
     with tab2:
-        st.markdown("## 🤖 AIに質問する")
-        st.markdown("議事録について、AIに質問できます。シニア向けの優しいAIがお答えします。")
+        # 高齢者向けのタイトルとスタイル
+        st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+        ">
+            <h2 style="margin: 0; font-size: 32px; color: white;">🤖 AIと議事録について対話する</h2>
+            <p style="margin: 10px 0 0 0; font-size: 20px; color: #f0f0f0;">
+                議事録の内容について、AIに質問できます。優しいAIがわかりやすくお答えします。
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # 議事録の有無を確認
+        if not recording or not recording['transcript']:
+            st.warning("⚠️ まだ議事録が作成されていません。「📝 議事録」タブから議事録を作成すると、その内容についてAIに質問できます。")
+            st.markdown("---")
+
+        # 質問の例を表示（高齢者向けに大きく見やすく）
+        st.markdown("""
+        <div style="
+            background-color: #e8f5e9;
+            padding: 25px;
+            border-radius: 15px;
+            border: 3px solid #4caf50;
+            margin-bottom: 25px;
+        ">
+            <h3 style="color: #2e7d32; font-size: 26px; margin-bottom: 15px;">💡 こんな質問ができます（例）</h3>
+            <ul style="font-size: 22px; line-height: 2; color: #333; margin: 0; padding-left: 25px;">
+                <li>「この会議の重要なポイントは？」</li>
+                <li>「次回までにやるべきことは？」</li>
+                <li>「〇〇についてもっと詳しく教えて」</li>
+                <li>「AIの使い方がよくわからないので教えて」</li>
+                <li>「今日学んだことを簡単にまとめて」</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
         st.markdown("---")
 
         # チャット履歴を表示
         chat_history = db.get_chat_history(meeting_id)
 
         if chat_history:
-            st.markdown("### 💬 会話履歴")
+            # 履歴のヘッダーとクリアボタン
+            col_header, col_clear = st.columns([3, 1])
+            with col_header:
+                st.markdown("""
+                <h3 style="font-size: 28px; color: #1565c0; margin-bottom: 20px;">💬 会話の履歴</h3>
+                """, unsafe_allow_html=True)
+            with col_clear:
+                if st.button("🗑️ 履歴をクリア", key="clear_chat"):
+                    success, message = db.clear_chat_history(meeting_id)
+                    if success:
+                        st.success("チャット履歴をクリアしました")
+                        st.rerun()
+                    else:
+                        st.error(message)
+
+            # チャット履歴を表示（高齢者向けに大きく見やすく）
             for msg in chat_history:
                 if msg['is_ai']:
-                    st.markdown(f'<div style="background-color: #e3f2fd; padding: 15px; border-radius: 10px; margin-bottom: 10px;">'
-                               f'<strong>🤖 AI:</strong><br>{msg["message"]}</div>', unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #e3f2fd;
+                        padding: 20px;
+                        border-radius: 15px;
+                        margin-bottom: 15px;
+                        border-left: 5px solid #2196f3;
+                        font-size: 20px;
+                        line-height: 1.8;
+                    ">
+                        <strong style="color: #1565c0; font-size: 22px;">🤖 AI:</strong><br>
+                        <span style="color: #333;">{msg["message"].replace(chr(10), '<br>')}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<div style="background-color: #f5f5f5; padding: 15px; border-radius: 10px; margin-bottom: 10px;">'
-                               f'<strong>👤 {msg["user_name"]}:</strong><br>{msg["message"]}</div>', unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #fff8e1;
+                        padding: 20px;
+                        border-radius: 15px;
+                        margin-bottom: 15px;
+                        border-left: 5px solid #ffc107;
+                        font-size: 20px;
+                        line-height: 1.8;
+                    ">
+                        <strong style="color: #f57c00; font-size: 22px;">👤 {msg["user_name"]}さん:</strong><br>
+                        <span style="color: #333;">{msg["message"].replace(chr(10), '<br>')}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
             st.markdown("---")
 
-        # チャット入力
-        st.markdown("### ✍️ 質問を入力")
+        # チャット入力（高齢者向けに大きく見やすく）
+        st.markdown("""
+        <div style="
+            background-color: #f5f5f5;
+            padding: 25px;
+            border-radius: 15px;
+            border: 3px solid #9e9e9e;
+            margin-bottom: 20px;
+        ">
+            <h3 style="color: #424242; font-size: 26px; margin-bottom: 15px;">✍️ 質問を入力してください</h3>
+            <p style="font-size: 18px; color: #666; margin: 0;">
+                下のボックスに質問を入力して、「質問する」ボタンを押してください。
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
         user_question = st.text_area(
             "質問内容",
             height=150,
-            placeholder="例：「この部分をもっと詳しく教えて」「AIの使い方がわからない」など",
-            key="ai_question"
+            placeholder="ここに質問を入力してください。\n例：「この会議の重要なポイントを教えて」",
+            key="ai_question",
+            label_visibility="collapsed"
         )
 
-        if st.button("💬 質問する", type="primary"):
-            if user_question:
-                # ユーザーのメッセージを保存
-                db.save_chat_message(meeting_id, user['id'], user_question, is_ai=False)
+        # 質問送信ボタン（大きく目立つように）
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("💬 質問する", type="primary", key="send_question", use_container_width=True):
+                if user_question:
+                    with st.spinner("🤖 AIが回答を作成中です。少々お待ちください..."):
+                        # ユーザーのメッセージを保存
+                        db.save_chat_message(meeting_id, user['id'], user_question, is_ai=False)
 
-                # AI応答を生成
-                ai_response = db.generate_ai_response(meeting_id, user_question)
+                        # AI応答を生成
+                        ai_response = db.generate_ai_response(meeting_id, user_question)
 
-                # AI応答を保存
-                db.save_chat_message(meeting_id, user['id'], ai_response, is_ai=True)
+                        # AI応答を保存
+                        db.save_chat_message(meeting_id, user['id'], ai_response, is_ai=True)
 
-                st.success("質問を送信しました！")
-                st.rerun()
-            else:
-                st.warning("質問を入力してください")
+                        st.success("✅ 回答が届きました！")
+                        st.rerun()
+                else:
+                    st.warning("質問を入力してください")
+
+        # 補足情報（高齢者向け）
+        st.markdown("---")
+        st.markdown("""
+        <div style="
+            background-color: #fff3e0;
+            padding: 20px;
+            border-radius: 15px;
+            border: 2px solid #ff9800;
+            margin-top: 20px;
+        ">
+            <h4 style="color: #e65100; font-size: 22px; margin-bottom: 10px;">📌 ヒント</h4>
+            <ul style="font-size: 18px; line-height: 1.8; color: #333; margin: 0; padding-left: 20px;">
+                <li>質問は<strong>具体的</strong>に書くと、より良い回答が得られます</li>
+                <li>何度でも質問できます。遠慮なく聞いてください！</li>
+                <li>AIの回答がわかりにくかったら、「もっと簡単に説明して」と聞いてみましょう</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
 
     with tab3:
         st.markdown("## 📚 学んだこと")
