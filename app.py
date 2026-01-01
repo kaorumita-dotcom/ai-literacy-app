@@ -225,12 +225,8 @@ st.markdown("""
     /* ========================================
        入力フィールドを大きく・目立つように
        ======================================== */
-    .stTextInput > div, .stTextArea > div, .stSelectbox > div {
-        margin-top: 5px !important;
-        margin-bottom: 15px !important;
-    }
-
-    /* 入力欄を大きく - 複数のセレクタで確実に適用 */
+    
+    /* 入力欄を大きく - 高さは自然に任せる */
     input[type="text"], 
     input[type="email"], 
     input[type="password"],
@@ -239,28 +235,22 @@ st.markdown("""
     .stTextInput > div > div > input,
     [data-testid="stTextInput"] input,
     [data-baseweb="input"] input {
-        font-size: 26px !important;
-        padding: 22px 20px !important;
-        min-height: 75px !important;
-        height: 75px !important;
-        border: 4px solid #1976d2 !important;
-        border-radius: 15px !important;
+        font-size: 24px !important;
+        padding: 18px 15px !important;
+        border: 3px solid #1976d2 !important;
+        border-radius: 12px !important;
         background-color: #ffffff !important;
         color: #333333 !important;
-        box-shadow: inset 0 3px 6px rgba(0,0,0,0.1) !important;
-        width: 100% !important;
-        line-height: 1.5 !important;
     }
 
     /* テキストエリアも大きく */
     textarea,
     .stTextArea textarea,
     [data-testid="stTextArea"] textarea {
-        font-size: 26px !important;
-        padding: 22px 20px !important;
-        min-height: 120px !important;
-        border: 4px solid #1976d2 !important;
-        border-radius: 15px !important;
+        font-size: 24px !important;
+        padding: 18px 15px !important;
+        border: 3px solid #1976d2 !important;
+        border-radius: 12px !important;
         background-color: #ffffff !important;
         color: #333333 !important;
     }
@@ -269,11 +259,10 @@ st.markdown("""
     .stSelectbox > div > div,
     [data-testid="stSelectbox"] > div > div,
     [data-baseweb="select"] > div {
-        font-size: 26px !important;
-        padding: 15px 20px !important;
-        min-height: 75px !important;
-        border: 4px solid #1976d2 !important;
-        border-radius: 15px !important;
+        font-size: 24px !important;
+        padding: 10px 15px !important;
+        border: 3px solid #1976d2 !important;
+        border-radius: 12px !important;
         background-color: #ffffff !important;
     }
 
@@ -283,7 +272,7 @@ st.markdown("""
     .stTextInput input::placeholder, 
     .stTextArea textarea::placeholder {
         color: #999999 !important;
-        font-size: 24px !important;
+        font-size: 22px !important;
     }
 
     /* フォーカス時のスタイル */
@@ -292,8 +281,8 @@ st.markdown("""
     .stTextInput input:focus, 
     .stTextArea textarea:focus {
         border-color: #ff9800 !important;
-        border-width: 5px !important;
-        box-shadow: 0 0 0 4px rgba(255, 152, 0, 0.3), inset 0 2px 4px rgba(0,0,0,0.1) !important;
+        border-width: 4px !important;
+        box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.3) !important;
         outline: none !important;
     }
 
@@ -306,11 +295,10 @@ st.markdown("""
     [data-testid="stTextInput"] label,
     [data-testid="stTextArea"] label,
     [data-testid="stSelectbox"] label {
-        font-size: 28px !important;
+        font-size: 26px !important;
         font-weight: bold !important;
         color: #1565c0 !important;
-        margin-bottom: 12px !important;
-        display: block !important;
+        margin-bottom: 8px !important;
     }
 
     /* 日付・時刻入力も大きく */
@@ -527,8 +515,8 @@ def show_step(number, text):
         padding: 20px;
         background-color: #fff8e1;
         border-radius: 15px;
-        margin-top: 25px;
-        margin-bottom: 20px;
+        margin-top: 30px;
+        margin-bottom: 10px;
         border-left: 5px solid #ff9800;
     ">
         <span style="
@@ -549,6 +537,8 @@ def show_step(number, text):
         <span style="font-size: 24px; color: #333;">{text}</span>
     </div>
     """, unsafe_allow_html=True)
+    # 余白を追加
+    st.markdown("")
 
 # 成功メッセージを大きく表示するヘルパー関数
 def show_success_message(message, message_type="success"):
