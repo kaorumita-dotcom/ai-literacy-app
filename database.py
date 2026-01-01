@@ -1588,7 +1588,316 @@ AI学習チェックリスト
         return True, f"⚠️ {len(success_list)}名に送信成功、{len(failed_list)}名に送信失敗", success_list, failed_list
 
 
+# リマインダー送信記録テーブルの初期化
+def init_reminder_table():
+    """リマインダー送信記録テーブルを初期化"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reminder_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            meeting_id INTEGER NOT NULL,
+            reminder_type TEXT NOT NULL CHECK(reminder_type IN ('invitation', 'reminder_24h', 'reminder_1h')),
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            recipient_count INTEGER DEFAULT 0,
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id),
+            UNIQUE(meeting_id, reminder_type)
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def check_reminder_sent(meeting_id: int, reminder_type: str) -> bool:
+    """リマインダーが送信済みかチェック"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id FROM reminder_logs
+        WHERE meeting_id = ? AND reminder_type = ?
+    """, (meeting_id, reminder_type))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return result is not None
+
+
+def log_reminder_sent(meeting_id: int, reminder_type: str, recipient_count: int) -> bool:
+    """リマインダー送信を記録"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO reminder_logs (meeting_id, reminder_type, recipient_count)
+            VALUES (?, ?, ?)
+        """, (meeting_id, reminder_type, recipient_count))
+
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.IntegrityError:
+        return False  # 既に記録済み
+    except Exception as e:
+        print(f"Error logging reminder: {e}")
+        return False
+
+
+def send_meeting_invitation_email(
+    meeting_id: int,
+    meeting_title: str,
+    meeting_description: str,
+    scheduled_at: str,
+    host_name: str,
+    group_name: str,
+    recipients: List[Dict],
+    zoom_url: str = None,
+    zoom_passcode: str = None
+) -> Tuple[bool, str, List[str], List[str]]:
+    """
+    ミーティング招待メールを送信（作成時に自動送信）
+
+    Args:
+        meeting_id: ミーティングID
+        meeting_title: ミーティングタイトル
+        meeting_description: ミーティングの説明
+        scheduled_at: 開催日時
+        host_name: ホスト名
+        group_name: グループ名
+        recipients: 送信先リスト
+        zoom_url: ZoomミーティングURL（オプション）
+        zoom_passcode: Zoomパスコード（オプション）
+
+    Returns:
+        (成功, メッセージ, 送信成功リスト, 送信失敗リスト)
+    """
+    # 既に送信済みかチェック
+    if check_reminder_sent(meeting_id, 'invitation'):
+        return True, "招待メールは既に送信済みです", [], []
+
+    # メール設定を取得
+    sender_email, sender_password = get_email_config()
+
+    if not sender_email or not sender_password:
+        return False, "メール設定が見つかりません。", [], []
+
+    # 日時の整形
+    try:
+        dt = datetime.fromisoformat(scheduled_at)
+        formatted_date = dt.strftime('%Y年%m月%d日 %H:%M')
+    except:
+        formatted_date = scheduled_at
+
+    success_list = []
+    failed_list = []
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+    except Exception as e:
+        return False, f"メールサーバーへの接続に失敗しました: {str(e)}", [], []
+
+    # Zoom情報のHTML
+    zoom_info_html = ""
+    if zoom_url:
+        zoom_info_html = f"""
+    <div style="background-color: #e3f2fd; padding: 30px; border-radius: 15px; border: 3px solid #2196f3; margin: 25px 0; text-align: center;">
+        <h3 style="color: #1565c0; margin-top: 0; font-size: 28px;">📹 Zoomミーティング情報</h3>
+        <a href="{zoom_url}" style="display: inline-block; background-color: #2196f3; color: white; padding: 20px 40px; font-size: 24px; text-decoration: none; border-radius: 10px; font-weight: bold; margin: 15px 0;">
+            🚀 ここをクリックしてZoomに参加
+        </a>
+        <p style="font-size: 20px; margin: 15px 0;"><strong>URL:</strong> {zoom_url}</p>
+"""
+        if zoom_passcode:
+            zoom_info_html += f'        <p style="font-size: 20px; margin: 10px 0;"><strong>🔑 パスコード:</strong> {zoom_passcode}</p>\n'
+        zoom_info_html += "    </div>"
+
+    for recipient in recipients:
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"【ミーティングのお知らせ】{meeting_title}"
+            msg['From'] = sender_email
+            msg['To'] = recipient['email']
+
+            text_body = f"""
+{recipient['name']} 様
+
+新しいミーティングのお知らせです。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📅 ミーティング名：{meeting_title}
+📆 開催日時：{formatted_date}
+👥 グループ：{group_name}
+👑 ホスト：{host_name}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{f"📝 説明：{meeting_description}" if meeting_description else ""}
+
+{f"📹 Zoom URL：{zoom_url}" if zoom_url else ""}
+{f"🔑 パスコード：{zoom_passcode}" if zoom_passcode else ""}
+
+カレンダーに予定を追加しておいてくださいね！
+
+AI学習チェックリスト
+            """
+
+            html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+<body style="font-family: 'メイリオ', sans-serif; font-size: 20px; line-height: 1.8; color: #333; max-width: 800px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); color: white; padding: 30px; border-radius: 15px; margin-bottom: 30px; text-align: center;">
+        <h1 style="margin: 0; font-size: 32px;">📅 ミーティングのお知らせ</h1>
+    </div>
+
+    <p style="font-size: 24px;"><strong>{recipient['name']}</strong> 様</p>
+    <p style="font-size: 22px;">新しいミーティングが予定されました！<br>ぜひご参加ください。</p>
+
+    <div style="background-color: #e8f5e9; padding: 30px; border-radius: 15px; border: 3px solid #4CAF50; margin: 25px 0;">
+        <p style="font-size: 26px; margin: 10px 0;"><strong>📅 {meeting_title}</strong></p>
+        <p style="font-size: 24px; margin: 10px 0;">📆 <strong>日時：</strong>{formatted_date}</p>
+        <p style="font-size: 22px; margin: 10px 0;">👥 <strong>グループ：</strong>{group_name}</p>
+        <p style="font-size: 22px; margin: 10px 0;">👑 <strong>ホスト：</strong>{host_name}</p>
+        {f'<p style="font-size: 20px; margin: 15px 0; color: #555;">📝 {meeting_description}</p>' if meeting_description else ''}
+    </div>
+
+    {zoom_info_html}
+
+    <div style="background-color: #fff3e0; padding: 25px; border-radius: 15px; border: 3px solid #ff9800; margin: 25px 0;">
+        <p style="font-size: 22px; color: #e65100; margin: 0;">
+            📌 <strong>お願い：</strong>カレンダーに予定を追加しておいてくださいね！
+        </p>
+    </div>
+
+    <div style="text-align: center; color: #6c757d; font-size: 16px; padding-top: 20px; border-top: 1px solid #dee2e6;">
+        <p>AI学習チェックリスト</p>
+    </div>
+</body>
+</html>
+            """
+
+            part1 = MIMEText(text_body, 'plain', 'utf-8')
+            part2 = MIMEText(html_body, 'html', 'utf-8')
+            msg.attach(part1)
+            msg.attach(part2)
+
+            server.send_message(msg)
+            success_list.append(recipient['email'])
+
+        except Exception as e:
+            failed_list.append(f"{recipient['email']} ({str(e)})")
+
+    server.quit()
+
+    # 送信記録を保存
+    if success_list:
+        log_reminder_sent(meeting_id, 'invitation', len(success_list))
+
+    if len(failed_list) == 0:
+        return True, f"✅ {len(success_list)}名に招待メールを送信しました！", success_list, failed_list
+    elif len(success_list) == 0:
+        return False, "❌ 招待メールの送信に失敗しました", success_list, failed_list
+    else:
+        return True, f"⚠️ {len(success_list)}名に送信成功、{len(failed_list)}名に送信失敗", success_list, failed_list
+
+
+def get_meetings_needing_reminder(user_id: int, hours_before: int = 24) -> List[Dict]:
+    """
+    リマインダーが必要なミーティングを取得
+    （指定時間以内に開催予定で、まだリマインダーを送っていないもの）
+
+    Args:
+        user_id: ホストのユーザーID
+        hours_before: 何時間前までのミーティングを対象にするか
+
+    Returns:
+        リマインダーが必要なミーティングのリスト
+    """
+    from datetime import datetime, timedelta
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    now = datetime.now()
+    future = now + timedelta(hours=hours_before)
+
+    reminder_type = 'reminder_24h' if hours_before == 24 else 'reminder_1h'
+
+    cursor.execute("""
+        SELECT m.*, u.name as host_name, g.name as group_name,
+               COUNT(mp.user_id) as participant_count
+        FROM meetings m
+        JOIN users u ON m.host_id = u.id
+        JOIN groups g ON m.group_id = g.id
+        LEFT JOIN meeting_participants mp ON m.id = mp.meeting_id
+        LEFT JOIN reminder_logs rl ON m.id = rl.meeting_id AND rl.reminder_type = ?
+        WHERE m.host_id = ?
+          AND m.scheduled_at IS NOT NULL
+          AND m.scheduled_at >= ?
+          AND m.scheduled_at <= ?
+          AND rl.id IS NULL
+        GROUP BY m.id
+        ORDER BY m.scheduled_at ASC
+    """, (reminder_type, user_id, now.isoformat(), future.isoformat()))
+
+    meetings = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return meetings
+
+
+def send_auto_reminder(meeting_id: int, reminder_type: str = 'reminder_24h') -> Tuple[bool, str, int]:
+    """
+    自動リマインダーを送信
+
+    Args:
+        meeting_id: ミーティングID
+        reminder_type: リマインダーの種類
+
+    Returns:
+        (成功, メッセージ, 送信数)
+    """
+    # 既に送信済みかチェック
+    if check_reminder_sent(meeting_id, reminder_type):
+        return True, "リマインダーは既に送信済みです", 0
+
+    # ミーティング情報を取得
+    meeting = get_meeting_by_id(meeting_id)
+    if not meeting:
+        return False, "ミーティングが見つかりません", 0
+
+    # 参加者を取得
+    participants = get_meeting_participants(meeting_id)
+    if not participants:
+        return False, "参加者がいません", 0
+
+    recipients = [{'name': p['name'], 'email': p['email']} for p in participants]
+
+    # リマインダーメールを送信
+    success, message, success_list, failed_list = send_zoom_reminder_email(
+        meeting['title'],
+        meeting.get('scheduled_at', ''),
+        recipients,
+        meeting.get('zoom_url', ''),
+        meeting.get('zoom_passcode')
+    )
+
+    # 送信記録を保存
+    if success_list:
+        log_reminder_sent(meeting_id, reminder_type, len(success_list))
+
+    return success, message, len(success_list)
+
+
 # データベース初期化
 if __name__ == "__main__":
     init_database()
+    init_reminder_table()
     print("データベースを初期化しました")
