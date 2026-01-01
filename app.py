@@ -2228,11 +2228,15 @@ def show_recording_tab(user, meeting, meeting_id, recording):
     st.markdown("## 🎤 録音・文字起こし")
     st.markdown("")
 
-    # 録音ファイルの表示
+    # 録音ファイルの表示（ファイル存在確認付き）
     if recording and recording['audio_file_path']:
-        st.markdown("### 📁 保存済み音声ファイル")
-        st.audio(recording['audio_file_path'])
-        st.markdown(f"**ファイル:** {os.path.basename(recording['audio_file_path'])}")
+        audio_path = recording['audio_file_path']
+        if os.path.exists(audio_path):
+            st.markdown("### 📁 保存済み音声ファイル")
+            st.audio(audio_path)
+            st.markdown(f"**ファイル:** {os.path.basename(audio_path)}")
+        else:
+            st.warning("⚠️ 音声ファイルが見つかりません（サーバー再起動により削除された可能性があります）")
     else:
         st.info("📭 録音ファイルはまだアップロードされていません")
 
