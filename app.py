@@ -1722,17 +1722,35 @@ def show_meeting_detail_page():
     if user['role'] == 'host' and user['id'] == meeting['host_id']:
         if not follow_up:
             with st.expander("📅 フォローアップミーティングを設定"):
-                st.markdown("このミーティングの1週間後にフォローアップミーティングを作成できます。")
-
-                if st.button("🔄 フォローアップミーティングを作成", type="primary"):
-                    from datetime import datetime, timedelta
-
-                    # 1週間後の日時を計算
-                    if meeting['scheduled_at']:
+                st.markdown("このミーティングのフォローアップミーティングを作成できます。")
+                
+                # デフォルト日時を計算（1週間後）
+                from datetime import datetime, timedelta, time as dt_time
+                if meeting['scheduled_at']:
+                    try:
                         original_dt = datetime.fromisoformat(meeting['scheduled_at'])
-                        followup_dt = original_dt + timedelta(days=7)
-                    else:
-                        followup_dt = datetime.now() + timedelta(days=7)
+                        default_date = (original_dt + timedelta(days=7)).date()
+                        default_time = original_dt.time()
+                    except:
+                        default_date = (datetime.now() + timedelta(days=7)).date()
+                        default_time = dt_time(12, 0)
+                else:
+                    default_date = (datetime.now() + timedelta(days=7)).date()
+                    default_time = dt_time(12, 0)
+                
+                # 日時選択
+                st.markdown("### 📆 日時を選択")
+                col1, col2 = st.columns(2)
+                with col1:
+                    followup_date = st.date_input("日付", value=default_date, key="followup_date")
+                with col2:
+                    followup_time = st.time_input("時刻", value=default_time, key="followup_time")
+                
+                st.markdown("")
+                
+                if st.button("🔄 フォローアップミーティングを作成", type="primary", use_container_width=True):
+                    # 選択した日時を結合
+                    followup_dt = datetime.combine(followup_date, followup_time)
 
                     # フォローアップミーティングを作成
                     followup_title = f"{meeting['title']} - フォローアップ"
@@ -1753,6 +1771,7 @@ def show_meeting_detail_page():
                         # フォローアップとして関連付け
                         db.create_follow_up_meeting(meeting_id, followup_id)
                         st.success("✅ フォローアップミーティングを作成しました！")
+                        st.balloons()
                         st.rerun()
                     else:
                         st.error(f"❌ {message}")
