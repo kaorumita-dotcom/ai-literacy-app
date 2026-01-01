@@ -413,6 +413,23 @@ def get_user_invitations(email: str) -> List[Dict]:
     conn.close()
     return invitations
 
+
+def get_pending_invitations_by_group(group_id: int) -> List[Dict]:
+    """グループの未登録招待者（まだアカウント作成していない人）を取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT gi.email, gi.created_at, u.name as invited_by_name
+        FROM group_invitations gi
+        JOIN users u ON gi.invited_by = u.id
+        WHERE gi.group_id = ? AND gi.status = 'pending'
+        ORDER BY gi.created_at DESC
+    """, (group_id,))
+    invitations = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return invitations
+
+
 def accept_invitation(invitation_id: int, user_id: int) -> Tuple[bool, str]:
     """招待を承認してグループに参加"""
     try:
@@ -1802,6 +1819,183 @@ AI学習チェックリスト
 
     if len(failed_list) == 0:
         return True, f"✅ {len(success_list)}名に招待メールを送信しました！", success_list, failed_list
+    elif len(success_list) == 0:
+        return False, "❌ 招待メールの送信に失敗しました", success_list, failed_list
+    else:
+        return True, f"⚠️ {len(success_list)}名に送信成功、{len(failed_list)}名に送信失敗", success_list, failed_list
+
+
+def send_meeting_invitation_to_pending(
+    meeting_title: str,
+    meeting_description: str,
+    scheduled_at: str,
+    host_name: str,
+    group_name: str,
+    pending_emails: List[str],
+    app_url: str,
+    zoom_url: str = None,
+    zoom_passcode: str = None
+) -> Tuple[bool, str, List[str], List[str]]:
+    """
+    未登録の招待者にミーティング招待メールを送信
+
+    Args:
+        meeting_title: ミーティングタイトル
+        meeting_description: ミーティングの説明
+        scheduled_at: 開催日時
+        host_name: ホスト名
+        group_name: グループ名
+        pending_emails: 未登録の招待者メールアドレスリスト
+        app_url: アプリのURL
+        zoom_url: ZoomミーティングURL（オプション）
+        zoom_passcode: Zoomパスコード（オプション）
+
+    Returns:
+        (成功, メッセージ, 送信成功リスト, 送信失敗リスト)
+    """
+    if not pending_emails:
+        return True, "送信対象者がいません", [], []
+
+    # メール設定を取得
+    sender_email, sender_password = get_email_config()
+
+    if not sender_email or not sender_password:
+        return False, "メール設定が見つかりません。", [], []
+
+    # 日時の整形
+    try:
+        dt = datetime.fromisoformat(scheduled_at)
+        formatted_date = dt.strftime('%Y年%m月%d日 %H:%M')
+    except:
+        formatted_date = scheduled_at
+
+    success_list = []
+    failed_list = []
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+    except Exception as e:
+        return False, f"メールサーバーへの接続に失敗しました: {str(e)}", [], []
+
+    # Zoom情報のHTML
+    zoom_info_html = ""
+    zoom_info_text = ""
+    if zoom_url:
+        zoom_info_text = f"""
+📹 Zoom URL：{zoom_url}
+🔑 パスコード：{zoom_passcode if zoom_passcode else '（なし）'}
+"""
+        zoom_info_html = f"""
+    <div style="background-color: #e3f2fd; padding: 30px; border-radius: 15px; border: 3px solid #2196f3; margin: 25px 0; text-align: center;">
+        <h3 style="color: #1565c0; margin-top: 0; font-size: 28px;">📹 Zoomミーティング情報</h3>
+        <a href="{zoom_url}" style="display: inline-block; background-color: #2196f3; color: white; padding: 20px 40px; font-size: 24px; text-decoration: none; border-radius: 10px; font-weight: bold; margin: 15px 0;">
+            🚀 ここをクリックしてZoomに参加
+        </a>
+        <p style="font-size: 20px; margin: 15px 0;"><strong>URL:</strong> {zoom_url}</p>
+"""
+        if zoom_passcode:
+            zoom_info_html += f'        <p style="font-size: 20px; margin: 10px 0;"><strong>🔑 パスコード:</strong> {zoom_passcode}</p>\n'
+        zoom_info_html += "    </div>"
+
+    for email in pending_emails:
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"【ミーティングのお知らせ】{meeting_title}（要アカウント登録）"
+            msg['From'] = sender_email
+            msg['To'] = email
+
+            text_body = f"""
+{email} 様
+
+{host_name}さんから「{group_name}」グループのミーティングにご招待されました。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📅 ミーティング名：{meeting_title}
+📆 開催日時：{formatted_date}
+👥 グループ：{group_name}
+👑 ホスト：{host_name}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{f"📝 説明：{meeting_description}" if meeting_description else ""}
+{zoom_info_text}
+
+【重要】ミーティングに参加するには、まずアプリでアカウント登録が必要です。
+
+🔗 アプリURL：{app_url}
+
+上記URLにアクセスし、「新規登録」からアカウントを作成してください。
+登録時は、このメールアドレス（{email}）をご使用ください。
+
+ご質問があれば、{host_name}さんにお問い合わせください。
+
+AI学習チェックリスト
+            """
+
+            html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+<body style="font-family: 'メイリオ', sans-serif; font-size: 20px; line-height: 1.8; color: #333; max-width: 800px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); color: white; padding: 30px; border-radius: 15px; margin-bottom: 30px; text-align: center;">
+        <h1 style="margin: 0; font-size: 32px;">📅 ミーティングのお知らせ</h1>
+    </div>
+
+    <p style="font-size: 24px;"><strong>{email}</strong> 様</p>
+    <p style="font-size: 22px;">
+        <strong>{host_name}</strong>さんから「<strong>{group_name}</strong>」グループのミーティングにご招待されました！
+    </p>
+
+    <div style="background-color: #e8f5e9; padding: 30px; border-radius: 15px; border: 3px solid #4CAF50; margin: 25px 0;">
+        <p style="font-size: 26px; margin: 10px 0;"><strong>📅 {meeting_title}</strong></p>
+        <p style="font-size: 24px; margin: 10px 0;">📆 <strong>日時：</strong>{formatted_date}</p>
+        <p style="font-size: 22px; margin: 10px 0;">👥 <strong>グループ：</strong>{group_name}</p>
+        <p style="font-size: 22px; margin: 10px 0;">👑 <strong>ホスト：</strong>{host_name}</p>
+        {f'<p style="font-size: 20px; margin: 15px 0; color: #555;">📝 {meeting_description}</p>' if meeting_description else ''}
+    </div>
+
+    {zoom_info_html}
+
+    <div style="background-color: #fff3e0; padding: 30px; border-radius: 15px; border: 4px solid #ff9800; margin: 25px 0;">
+        <h3 style="color: #e65100; margin-top: 0; font-size: 26px;">⚠️ 重要：アカウント登録が必要です</h3>
+        <p style="font-size: 20px; color: #e65100;">
+            ミーティングに参加するには、まずアプリでアカウント登録が必要です。
+        </p>
+        <div style="text-align: center; margin: 20px 0;">
+            <a href="{app_url}" style="display: inline-block; background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); color: white; padding: 20px 40px; font-size: 24px; text-decoration: none; border-radius: 10px; font-weight: bold;">
+                📱 アプリを開いて登録する
+            </a>
+        </div>
+        <p style="font-size: 18px; color: #795548;">
+            ※ 登録時は、このメールアドレス（{email}）をご使用ください。
+        </p>
+    </div>
+
+    <div style="text-align: center; color: #6c757d; font-size: 16px; padding-top: 20px; border-top: 1px solid #dee2e6;">
+        <p>AI学習チェックリスト</p>
+    </div>
+</body>
+</html>
+            """
+
+            part1 = MIMEText(text_body, 'plain', 'utf-8')
+            part2 = MIMEText(html_body, 'html', 'utf-8')
+            msg.attach(part1)
+            msg.attach(part2)
+
+            server.send_message(msg)
+            success_list.append(email)
+
+        except Exception as e:
+            failed_list.append(f"{email} ({str(e)})")
+
+    server.quit()
+
+    if len(failed_list) == 0:
+        return True, f"✅ 未登録者{len(success_list)}名に招待メールを送信しました！", success_list, failed_list
     elif len(success_list) == 0:
         return False, "❌ 招待メールの送信に失敗しました", success_list, failed_list
     else:
