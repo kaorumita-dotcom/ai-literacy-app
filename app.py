@@ -135,6 +135,13 @@ st.markdown("""
         box-shadow: 0 6px 12px rgba(0,0,0,0.2) !important;
     }
 
+    /* ボタンクリック時の効果 */
+    .stButton button:active {
+        transform: translateY(2px) !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+        background: linear-gradient(135deg, #0d47a1 0%, #1565c0 100%) !important;
+    }
+
     /* プライマリボタン（主要アクション） */
     .stButton button[kind="primary"] {
         background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%) !important;
@@ -341,6 +348,17 @@ st.markdown("""
         border-radius: 15px !important;
     }
 
+    /* スピナー（処理中表示）を目立たせる */
+    .stSpinner > div {
+        font-size: 24px !important;
+        font-weight: bold !important;
+        color: #1565c0 !important;
+    }
+
+    .stSpinner > div > div {
+        border-width: 4px !important;
+    }
+
     /* タブのスタイル */
     .stTabs [data-baseweb="tab-list"] {
         gap: 10px;
@@ -375,6 +393,10 @@ if 'user' not in st.session_state:
     st.session_state.user = None
 if 'page' not in st.session_state:
     st.session_state.page = 'dashboard'
+if 'success_message' not in st.session_state:
+    st.session_state.success_message = None
+if 'success_type' not in st.session_state:
+    st.session_state.success_type = None
 
 # 進捗計算
 def calculate_progress(checklist_data):
@@ -410,6 +432,61 @@ def show_step(number, text):
         <span class="step-text">{text}</span>
     </div>
     """, unsafe_allow_html=True)
+
+# 成功メッセージを大きく表示するヘルパー関数
+def show_success_message(message, message_type="success"):
+    """成功メッセージを大きく目立つように表示"""
+    if message_type == "success":
+        bg_color = "#d4edda"
+        border_color = "#28a745"
+        text_color = "#155724"
+        icon = "🎉"
+    elif message_type == "info":
+        bg_color = "#d1ecf1"
+        border_color = "#17a2b8"
+        text_color = "#0c5460"
+        icon = "ℹ️"
+    else:
+        bg_color = "#fff3cd"
+        border_color = "#ffc107"
+        text_color = "#856404"
+        icon = "⚠️"
+
+    st.markdown(f"""
+    <div style="
+        background-color: {bg_color};
+        border: 5px solid {border_color};
+        border-radius: 20px;
+        padding: 30px;
+        margin: 25px 0;
+        text-align: center;
+        animation: fadeIn 0.5s ease-in;
+    ">
+        <p style="font-size: 48px; margin: 0;">{icon}</p>
+        <p style="font-size: 28px; font-weight: bold; color: {text_color}; margin: 15px 0;">
+            {message}
+        </p>
+    </div>
+    <style>
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: scale(0.9); }}
+            to {{ opacity: 1; transform: scale(1); }}
+        }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# セッション状態の成功メッセージを表示してクリア
+def display_and_clear_success_message():
+    """セッション状態に保存された成功メッセージを表示してクリア"""
+    if st.session_state.success_message:
+        show_success_message(
+            st.session_state.success_message,
+            st.session_state.success_type or "success"
+        )
+        st.balloons()
+        # メッセージをクリア
+        st.session_state.success_message = None
+        st.session_state.success_type = None
 
 # Zoom参加ボタンを表示するヘルパー関数
 def show_zoom_join_button(zoom_url, zoom_passcode=None):
@@ -543,6 +620,10 @@ def show_dashboard():
 
     st.title(f"👋 こんにちは、{user['name']}さん")
     st.markdown(f"**役割:** {'👑 ホスト（教える人）' if user['role'] == 'host' else '👤 参加者（学習する人）'}")
+
+    # 成功メッセージがあれば表示
+    display_and_clear_success_message()
+
     st.markdown("---")
 
     # チェックリスト進捗
@@ -927,19 +1008,25 @@ def show_groups_page():
 
             if st.button("✨ グループを作成", type="primary", use_container_width=True):
                 if group_name:
-                    success, message, group_id = db.create_group(group_name, group_description, user['id'])
-                    if success:
-                        st.success(f"🎉 {message}")
-                        st.balloons()
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {message}")
+                    with st.spinner("🔄 グループを作成中です...しばらくお待ちください"):
+                        import time
+                        time.sleep(0.5)  # 処理中であることを視覚的に示す
+                        success, message, group_id = db.create_group(group_name, group_description, user['id'])
+                        if success:
+                            st.session_state.success_message = f"グループ「{group_name}」を作成しました！"
+                            st.session_state.success_type = "success"
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {message}")
                 else:
                     st.warning("⚠️ グループ名を入力してください")
 
         with tab2:
             st.markdown("## 📋 管理中のグループ")
             st.markdown("")
+
+            # 成功メッセージがあれば表示
+            display_and_clear_success_message()
 
             groups = db.get_groups_by_host(user['id'])
 
@@ -1049,6 +1136,9 @@ def show_meetings_list(user):
     """ミーティング一覧を表示"""
     st.markdown("## 📋 参加するミーティング")
     st.markdown("")
+
+    # 成功メッセージがあれば表示
+    display_and_clear_success_message()
 
     meetings = db.get_meetings_by_user(user['id'])
 
@@ -1200,27 +1290,28 @@ def show_create_meeting(user):
 
     if st.button("✨ ミーティングを作成", type="primary", use_container_width=True):
         if meeting_title and selected_group_id:
-            from datetime import datetime
-            scheduled_at = datetime.combine(meeting_date, meeting_time).isoformat()
+            with st.spinner("🔄 ミーティングを作成中です...しばらくお待ちください"):
+                import time
+                time.sleep(0.5)  # 処理中であることを視覚的に示す
 
-            success, message, meeting_id = db.create_meeting(
-                meeting_title,
-                meeting_description,
-                selected_group_id,
-                user['id'],
-                scheduled_at,
-                zoom_url if zoom_url else None,
-                zoom_meeting_id if zoom_meeting_id else None,
-                zoom_passcode if zoom_passcode else None
-            )
+                from datetime import datetime
+                scheduled_at = datetime.combine(meeting_date, meeting_time).isoformat()
 
-            if success:
-                st.success(f"🎉 {message}")
-                st.balloons()
+                success, message, meeting_id = db.create_meeting(
+                    meeting_title,
+                    meeting_description,
+                    selected_group_id,
+                    user['id'],
+                    scheduled_at,
+                    zoom_url if zoom_url else None,
+                    zoom_meeting_id if zoom_meeting_id else None,
+                    zoom_passcode if zoom_passcode else None
+                )
 
-                # 招待メール送信
-                if send_invitation:
-                    with st.spinner("📧 参加者に招待メールを送信中..."):
+                if success:
+                    # 招待メール送信
+                    email_result = ""
+                    if send_invitation:
                         # リマインダーテーブルを初期化
                         db.init_reminder_table()
 
@@ -1242,14 +1333,15 @@ def show_create_meeting(user):
                         )
 
                         if email_success:
-                            st.success(f"📧 {email_message}")
-                        else:
-                            st.warning(f"⚠️ 招待メール: {email_message}")
+                            email_result = f"\n📧 {email_message}"
 
-                st.session_state.selected_meeting = meeting_id
-                st.rerun()
-            else:
-                st.error(f"❌ {message}")
+                    st.session_state.success_message = f"ミーティング「{meeting_title}」を作成しました！{email_result}"
+                    st.session_state.success_type = "success"
+                    st.session_state.selected_meeting = meeting_id
+                    st.session_state.page = 'meetings'
+                    st.rerun()
+                else:
+                    st.error(f"❌ {message}")
         else:
             st.warning("⚠️ タイトルとグループを選択してください")
 
