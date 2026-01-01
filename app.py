@@ -1012,21 +1012,39 @@ def show_groups_page():
                         import time
                         time.sleep(0.5)  # 処理中であることを視覚的に示す
                         success, message, group_id = db.create_group(group_name, group_description, user['id'])
-                        if success:
-                            st.session_state.success_message = f"グループ「{group_name}」を作成しました！"
-                            st.session_state.success_type = "success"
-                            st.rerun()
-                        else:
-                            st.error(f"❌ {message}")
+
+                    if success:
+                        # 成功メッセージを大きく表示
+                        st.markdown(f"""
+                        <div style="
+                            background-color: #d4edda;
+                            border: 5px solid #28a745;
+                            border-radius: 20px;
+                            padding: 40px;
+                            margin: 30px 0;
+                            text-align: center;
+                        ">
+                            <p style="font-size: 60px; margin: 0;">🎉</p>
+                            <p style="font-size: 32px; font-weight: bold; color: #155724; margin: 20px 0;">
+                                グループ「{group_name}」を作成しました！
+                            </p>
+                            <p style="font-size: 20px; color: #155724;">
+                                3秒後に画面が切り替わります...
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        st.balloons()
+                        import time
+                        time.sleep(3)  # 3秒間メッセージを表示
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {message}")
                 else:
                     st.warning("⚠️ グループ名を入力してください")
 
         with tab2:
             st.markdown("## 📋 管理中のグループ")
             st.markdown("")
-
-            # 成功メッセージがあれば表示
-            display_and_clear_success_message()
 
             groups = db.get_groups_by_host(user['id'])
 
@@ -1308,10 +1326,11 @@ def show_create_meeting(user):
                     zoom_passcode if zoom_passcode else None
                 )
 
-                if success:
-                    # 招待メール送信
-                    email_result = ""
-                    if send_invitation:
+            if success:
+                # 招待メール送信
+                email_result = ""
+                if send_invitation:
+                    with st.spinner("📧 参加者に招待メールを送信中..."):
                         # リマインダーテーブルを初期化
                         db.init_reminder_table()
 
@@ -1333,15 +1352,38 @@ def show_create_meeting(user):
                         )
 
                         if email_success:
-                            email_result = f"\n📧 {email_message}"
+                            email_result = f"<br>📧 {email_message}"
 
-                    st.session_state.success_message = f"ミーティング「{meeting_title}」を作成しました！{email_result}"
-                    st.session_state.success_type = "success"
-                    st.session_state.selected_meeting = meeting_id
-                    st.session_state.page = 'meetings'
-                    st.rerun()
-                else:
-                    st.error(f"❌ {message}")
+                # 成功メッセージを大きく表示
+                st.markdown(f"""
+                <div style="
+                    background-color: #d4edda;
+                    border: 5px solid #28a745;
+                    border-radius: 20px;
+                    padding: 40px;
+                    margin: 30px 0;
+                    text-align: center;
+                ">
+                    <p style="font-size: 60px; margin: 0;">🎉</p>
+                    <p style="font-size: 32px; font-weight: bold; color: #155724; margin: 20px 0;">
+                        ミーティング「{meeting_title}」を作成しました！
+                    </p>
+                    <p style="font-size: 22px; color: #155724;">
+                        {email_result}
+                    </p>
+                    <p style="font-size: 20px; color: #155724; margin-top: 15px;">
+                        3秒後に画面が切り替わります...
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                st.balloons()
+                import time
+                time.sleep(3)  # 3秒間メッセージを表示
+                st.session_state.selected_meeting = meeting_id
+                st.session_state.page = 'meetings'
+                st.rerun()
+            else:
+                st.error(f"❌ {message}")
         else:
             st.warning("⚠️ タイトルとグループを選択してください")
 
