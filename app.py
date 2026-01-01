@@ -1255,25 +1255,48 @@ def show_meetings_page():
         if 'meeting_view' not in st.session_state:
             st.session_state.meeting_view = 'list'
         
-        # タブ風のボタンを作成
+        # 現在の選択状態を表示
+        current_view = st.session_state.meeting_view
+        
+        # タブ風のボタンを作成（スタイルは下のHTMLで表示）
+        if current_view == 'list':
+            st.markdown("""
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <div style="flex: 1; background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%); color: white; padding: 15px; border-radius: 10px; text-align: center; font-size: 20px; font-weight: bold;">
+                    📋 ミーティング一覧（選択中）
+                </div>
+                <div style="flex: 1; background: #f5f5f5; color: #333; padding: 15px; border-radius: 10px; text-align: center; font-size: 20px; border: 2px solid #ddd;">
+                    ➕ 新規作成
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <div style="flex: 1; background: #f5f5f5; color: #333; padding: 15px; border-radius: 10px; text-align: center; font-size: 20px; border: 2px solid #ddd;">
+                    📋 ミーティング一覧
+                </div>
+                <div style="flex: 1; background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%); color: white; padding: 15px; border-radius: 10px; text-align: center; font-size: 20px; font-weight: bold;">
+                    ➕ 新規作成（選択中）
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # ボタンで切り替え
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📋 ミーティング一覧", 
-                        type="primary" if st.session_state.meeting_view == 'list' else "secondary",
-                        use_container_width=True):
+            if st.button("📋 一覧を表示", key="show_list_btn", use_container_width=True):
                 st.session_state.meeting_view = 'list'
                 st.rerun()
         with col2:
-            if st.button("➕ 新規作成", 
-                        type="primary" if st.session_state.meeting_view == 'create' else "secondary",
-                        use_container_width=True):
+            if st.button("➕ 新規作成する", key="show_create_btn", use_container_width=True):
                 st.session_state.meeting_view = 'create'
                 st.rerun()
         
         st.markdown("---")
         
         # 選択されたビューを表示
-        if st.session_state.meeting_view == 'list':
+        if current_view == 'list':
             show_meetings_list(user)
         else:
             show_create_meeting(user)
