@@ -347,6 +347,42 @@ def get_groups_by_member(user_id: int) -> List[Dict]:
     conn.close()
     return groups
 
+
+
+def leave_group(group_id: int, user_id: int) -> Tuple[bool, str]:
+    """グループから退会する（ホストは退会不可）"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # グループ情報を取得してホストかどうか確認
+        cursor.execute("SELECT host_id, name FROM groups WHERE id = ?", (group_id,))
+        group = cursor.fetchone()
+        
+        if not group:
+            conn.close()
+            return False, "グループが見つかりません"
+        
+        if group['host_id'] == user_id:
+            conn.close()
+            return False, "ホストはグループから退会できません"
+        
+        # グループメンバーから削除
+        cursor.execute(
+            "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
+            (group_id, user_id)
+        )
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return False, "このグループに参加していません"
+        
+        conn.commit()
+        conn.close()
+        return True, f"グループ「{group['name']}」から退会しました"
+    except Exception as e:
+        return False, f"エラーが発生しました: {str(e)}"
+
 def get_group_by_id(group_id: int) -> Optional[Dict]:
     """グループIDからグループ情報を取得"""
     conn = get_connection()
