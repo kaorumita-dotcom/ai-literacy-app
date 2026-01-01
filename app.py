@@ -1697,6 +1697,59 @@ def show_meeting_detail_page():
             else:
                 st.warning("⚠️ Zoom URLが設定されていません")
 
+        # 参加者全員に招待メールを送信
+        with st.expander("📧 参加者全員に招待メールを送信"):
+            st.markdown("グループのメンバー全員にミーティングの招待メールを送信できます。")
+            
+            # 参加者一覧を表示
+            participants = db.get_meeting_participants(meeting_id)
+            if participants:
+                st.markdown("**送信先：**")
+                for p in participants:
+                    if p['id'] != user['id']:
+                        st.markdown(f"- {p['name']} （{p['email']}）")
+                
+                # フォローアップミーティングかどうか確認
+                is_followup = "フォローアップ" in meeting['title']
+                
+                # 日時の整形
+                formatted_date = "日時未定"
+                if meeting.get('scheduled_at'):
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(meeting['scheduled_at'])
+                        formatted_date = dt.strftime('%Y年%m月%d日 %H:%M')
+                    except:
+                        formatted_date = meeting['scheduled_at']
+                
+                if st.button("📨 招待メールを送信", type="primary", key="send_invitation_btn"):
+                    with st.spinner("📤 メールを送信中..."):
+                        sent_count = 0
+                        for p in participants:
+                            if p['id'] != user['id']:
+                                email_success = db.send_single_meeting_invitation(
+                                    p['email'],
+                                    p['name'],
+                                    meeting['title'],
+                                    meeting.get('description', ''),
+                                    formatted_date,
+                                    meeting['group_name'],
+                                    meeting['host_name'],
+                                    meeting.get('zoom_url'),
+                                    meeting.get('zoom_passcode'),
+                                    is_followup=is_followup
+                                )
+                                if email_success:
+                                    sent_count += 1
+                        
+                        if sent_count > 0:
+                            st.success(f"🎉 {sent_count}名に招待メールを送信しました！")
+                            st.balloons()
+                        else:
+                            st.warning("⚠️ 送信先がありません（ホスト以外のメンバーがいません）")
+            else:
+                st.info("📭 参加者がいません")
+
     st.markdown("---")
 
     # 録音・議事録セクション
