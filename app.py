@@ -616,6 +616,75 @@ def show_dashboard():
 
     st.markdown("---")
 
+    # ホストの場合：リマインダー送信が必要なミーティングをチェック
+    if user['role'] == 'host':
+        # リマインダーテーブルを初期化
+        db.init_reminder_table()
+
+        meetings_needing_reminder = db.get_meetings_needing_reminder(user['id'], hours_before=24)
+
+        if meetings_needing_reminder:
+            st.markdown("""
+            <div style="
+                background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+                color: white;
+                padding: 25px;
+                border-radius: 15px;
+                margin-bottom: 25px;
+            ">
+                <h2 style="margin: 0; color: white; font-size: 28px;">🔔 リマインダー送信のお知らせ</h2>
+                <p style="margin: 10px 0 0 0; font-size: 20px;">
+                    24時間以内に開催予定のミーティングがあります。参加者にリマインダーを送信しましょう！
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            for meeting in meetings_needing_reminder:
+                scheduled_dt = datetime.fromisoformat(meeting['scheduled_at'])
+                hours_until = (scheduled_dt - datetime.now()).total_seconds() / 3600
+
+                st.markdown(f"""
+                <div class="group-card" style="border: 4px solid #ff9800; background-color: #fff3e0;">
+                    <h3 style="color: #e65100;">⏰ {meeting['title']}</h3>
+                    <p><strong>日時：</strong>{scheduled_dt.strftime('%Y年%m月%d日 %H:%M')}</p>
+                    <p><strong>あと約{int(hours_until)}時間</strong>で開催</p>
+                    <p><strong>参加者数：</strong>{meeting['participant_count']}名</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"📧 リマインダーを送信", key=f"send_reminder_{meeting['id']}", type="primary", use_container_width=True):
+                        with st.spinner("📤 リマインダーを送信中..."):
+                            success, message, sent_count = db.send_auto_reminder(meeting['id'], 'reminder_24h')
+                            if success:
+                                st.success(f"✅ {message}")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {message}")
+                with col2:
+                    if meeting.get('zoom_url'):
+                        st.info(f"📹 Zoom設定済み")
+                    else:
+                        st.warning(f"⚠️ Zoom未設定")
+
+                st.markdown("")
+
+            # 一括送信ボタン
+            if len(meetings_needing_reminder) > 1:
+                st.markdown("---")
+                if st.button("📨 全てのリマインダーを一括送信", type="primary", use_container_width=True):
+                    with st.spinner("📤 リマインダーを一括送信中..."):
+                        total_sent = 0
+                        for meeting in meetings_needing_reminder:
+                            success, message, sent_count = db.send_auto_reminder(meeting['id'], 'reminder_24h')
+                            if success:
+                                total_sent += sent_count
+                        st.success(f"✅ {len(meetings_needing_reminder)}件のミーティングにリマインダーを送信しました！")
+                        st.rerun()
+
+            st.markdown("---")
+
     # 今後のミーティング予定（リマインダー）
     st.markdown("## 📅 今後のミーティング予定")
 
@@ -1117,7 +1186,16 @@ def show_create_meeting(user):
                                       placeholder="例: abc123")
 
     st.markdown("---")
-    show_step(6, "下のボタンを押してミーティングを作成してください")
+    show_step(6, "招待メールを送信するか選択してください")
+
+    send_invitation = st.checkbox(
+        "✉️ 参加者全員に招待メールを自動送信する（Zoom情報含む）",
+        value=True,
+        key="send_invitation_email"
+    )
+
+    st.markdown("")
+    show_step(7, "下のボタンを押してミーティングを作成してください")
     st.markdown("")
 
     if st.button("✨ ミーティングを作成", type="primary", use_container_width=True):
@@ -1139,6 +1217,35 @@ def show_create_meeting(user):
             if success:
                 st.success(f"🎉 {message}")
                 st.balloons()
+
+                # 招待メール送信
+                if send_invitation:
+                    with st.spinner("📧 参加者に招待メールを送信中..."):
+                        # リマインダーテーブルを初期化
+                        db.init_reminder_table()
+
+                        # グループ情報を取得
+                        group = db.get_group_by_id(selected_group_id)
+                        participants = db.get_meeting_participants(meeting_id)
+                        recipients = [{'name': p['name'], 'email': p['email']} for p in participants]
+
+                        email_success, email_message, success_list, failed_list = db.send_meeting_invitation_email(
+                            meeting_id=meeting_id,
+                            meeting_title=meeting_title,
+                            meeting_description=meeting_description,
+                            scheduled_at=scheduled_at,
+                            host_name=user['name'],
+                            group_name=group['name'] if group else '',
+                            recipients=recipients,
+                            zoom_url=zoom_url if zoom_url else None,
+                            zoom_passcode=zoom_passcode if zoom_passcode else None
+                        )
+
+                        if email_success:
+                            st.success(f"📧 {email_message}")
+                        else:
+                            st.warning(f"⚠️ 招待メール: {email_message}")
+
                 st.session_state.selected_meeting = meeting_id
                 st.rerun()
             else:
