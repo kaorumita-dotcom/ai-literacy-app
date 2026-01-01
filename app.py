@@ -226,7 +226,7 @@ st.markdown("""
        入力フィールドを大きく・目立つように
        ======================================== */
     
-    /* 入力欄を大きく - 高さは自然に任せる */
+    /* 入力欄を大きく - ボーダーを細めに */
     input[type="text"], 
     input[type="email"], 
     input[type="password"],
@@ -235,10 +235,10 @@ st.markdown("""
     .stTextInput > div > div > input,
     [data-testid="stTextInput"] input,
     [data-baseweb="input"] input {
-        font-size: 24px !important;
-        padding: 18px 15px !important;
-        border: 3px solid #1976d2 !important;
-        border-radius: 12px !important;
+        font-size: 22px !important;
+        padding: 12px 15px !important;
+        border: 2px solid #1976d2 !important;
+        border-radius: 10px !important;
         background-color: #ffffff !important;
         color: #333333 !important;
     }
@@ -247,10 +247,10 @@ st.markdown("""
     textarea,
     .stTextArea textarea,
     [data-testid="stTextArea"] textarea {
-        font-size: 24px !important;
-        padding: 18px 15px !important;
-        border: 3px solid #1976d2 !important;
-        border-radius: 12px !important;
+        font-size: 22px !important;
+        padding: 12px 15px !important;
+        border: 2px solid #1976d2 !important;
+        border-radius: 10px !important;
         background-color: #ffffff !important;
         color: #333333 !important;
     }
@@ -259,10 +259,10 @@ st.markdown("""
     .stSelectbox > div > div,
     [data-testid="stSelectbox"] > div > div,
     [data-baseweb="select"] > div {
-        font-size: 24px !important;
-        padding: 10px 15px !important;
-        border: 3px solid #1976d2 !important;
-        border-radius: 12px !important;
+        font-size: 22px !important;
+        padding: 8px 15px !important;
+        border: 2px solid #1976d2 !important;
+        border-radius: 10px !important;
         background-color: #ffffff !important;
     }
 
@@ -272,7 +272,7 @@ st.markdown("""
     .stTextInput input::placeholder, 
     .stTextArea textarea::placeholder {
         color: #999999 !important;
-        font-size: 22px !important;
+        font-size: 20px !important;
     }
 
     /* フォーカス時のスタイル */
@@ -281,8 +281,8 @@ st.markdown("""
     .stTextInput input:focus, 
     .stTextArea textarea:focus {
         border-color: #ff9800 !important;
-        border-width: 4px !important;
-        box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.3) !important;
+        border-width: 3px !important;
+        box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.3) !important;
         outline: none !important;
     }
 
@@ -295,10 +295,10 @@ st.markdown("""
     [data-testid="stTextInput"] label,
     [data-testid="stTextArea"] label,
     [data-testid="stSelectbox"] label {
-        font-size: 26px !important;
+        font-size: 24px !important;
         font-weight: bold !important;
         color: #1565c0 !important;
-        margin-bottom: 8px !important;
+        margin-bottom: 5px !important;
     }
 
     /* 日付・時刻入力も大きく */
