@@ -255,17 +255,6 @@ st.markdown("""
         color: #333333 !important;
     }
 
-    /* セレクトボックスも大きく */
-    .stSelectbox > div > div,
-    [data-testid="stSelectbox"] > div > div,
-    [data-baseweb="select"] > div {
-        font-size: 22px !important;
-        padding: 8px 15px !important;
-        border: 2px solid #1976d2 !important;
-        border-radius: 10px !important;
-        background-color: #ffffff !important;
-    }
-
     /* プレースホルダーを見やすく */
     input::placeholder, 
     textarea::placeholder,
@@ -301,17 +290,15 @@ st.markdown("""
         margin-bottom: 5px !important;
     }
 
-    /* 日付・時刻入力も大きく */
+    /* 日付・時刻入力も見やすく */
     .stDateInput input, 
     .stTimeInput input,
     [data-testid="stDateInput"] input,
     [data-testid="stTimeInput"] input {
-        font-size: 26px !important;
-        padding: 20px !important;
-        min-height: 75px !important;
-        height: 75px !important;
-        border: 4px solid #1976d2 !important;
-        border-radius: 15px !important;
+        font-size: 20px !important;
+        padding: 10px !important;
+        border: 2px solid #1976d2 !important;
+        border-radius: 10px !important;
         background-color: #ffffff !important;
     }
 
