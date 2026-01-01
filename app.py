@@ -718,6 +718,21 @@ def show_dashboard():
                 st.markdown(f"**説明:** {group['description']}")
             st.markdown(f"**ホスト:** {group['host_name']}")
             st.markdown(f"**メンバー数:** {group['member_count']}名")
+            
+            # ホストでない場合のみ退会ボタンを表示
+            if group['host_id'] != user['id']:
+                with st.expander("⚙️ グループ設定"):
+                    st.warning("⚠️ このグループから退会しますか？")
+                    if st.button(f"🚪 「{group['name']}」から退会する", key=f"leave_group_{group['id']}", type="secondary"):
+                        success, message = db.leave_group(group['id'], user['id'])
+                        if success:
+                            st.success(f"✅ {message}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {message}")
+            else:
+                st.markdown("👑 **あなたがホストです**")
+            
             st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.info("📭 まだグループに参加していません")
@@ -767,8 +782,15 @@ def show_dashboard():
             """, unsafe_allow_html=True)
 
             for meeting in meetings_needing_reminder:
-                scheduled_dt = datetime.fromisoformat(meeting['scheduled_at'])
-                hours_until = (scheduled_dt - datetime.now()).total_seconds() / 3600
+                # scheduled_atがNoneの場合はスキップ
+                if not meeting.get('scheduled_at'):
+                    continue
+                    
+                try:
+                    scheduled_dt = datetime.fromisoformat(meeting['scheduled_at'])
+                    hours_until = (scheduled_dt - datetime.now()).total_seconds() / 3600
+                except:
+                    continue
 
                 st.markdown(f"""
                 <div class="group-card" style="border: 4px solid #ff9800; background-color: #fff3e0;">
@@ -1074,15 +1096,17 @@ def show_groups_page():
                             <p style="font-size: 32px; font-weight: bold; color: #155724; margin: 20px 0;">
                                 グループ「{group_name}」を作成しました！
                             </p>
-                            <p style="font-size: 20px; color: #155724;">
-                                3秒後に画面が切り替わります...
+                            <p style="font-size: 22px; color: #155724; margin: 15px 0;">
+                                📋 「管理中のグループ」タブでメンバーを招待できます
                             </p>
                         </div>
                         """, unsafe_allow_html=True)
                         st.balloons()
-                        import time
-                        time.sleep(3)  # 3秒間メッセージを表示
-                        st.rerun()
+                        
+                        # ボタンで画面遷移
+                        st.markdown("")
+                        if st.button("📋 管理中のグループを見る", type="primary", use_container_width=True):
+                            st.rerun()
                     else:
                         st.error(f"❌ {message}")
                 else:
@@ -1448,17 +1472,19 @@ def show_create_meeting(user):
                     <p style="font-size: 22px; color: #155724;">
                         {combined_email_result}
                     </p>
-                    <p style="font-size: 20px; color: #155724; margin-top: 15px;">
-                        3秒後に画面が切り替わります...
+                    <p style="font-size: 22px; color: #155724; margin-top: 15px;">
+                        📅 「ミーティング一覧」タブで詳細を確認できます
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
                 st.balloons()
-                import time
-                time.sleep(3)  # 3秒間メッセージを表示
-                st.session_state.selected_meeting = meeting_id
-                st.session_state.page = 'meetings'
-                st.rerun()
+                
+                # ボタンで画面遷移
+                st.markdown("")
+                if st.button("📅 ミーティング一覧を見る", type="primary", use_container_width=True):
+                    st.session_state.selected_meeting = meeting_id
+                    st.session_state.page = 'meetings'
+                    st.rerun()
             else:
                 st.error(f"❌ {message}")
         else:
