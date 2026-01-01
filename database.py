@@ -1520,7 +1520,8 @@ def send_zoom_reminder_email(
     scheduled_at: str,
     recipients: List[Dict],
     zoom_url: str,
-    zoom_passcode: str = None
+    zoom_passcode: str = None,
+    is_followup: bool = False
 ) -> Tuple[bool, str, List[str], List[str]]:
     """
     Zoomミーティングのリマインダーメールを送信
@@ -1531,6 +1532,7 @@ def send_zoom_reminder_email(
         recipients: 送信先リスト
         zoom_url: ZoomミーティングURL
         zoom_passcode: Zoomパスコード（オプション）
+        is_followup: フォローアップミーティングかどうか
 
     Returns:
         (成功, メッセージ, 送信成功リスト, 送信失敗リスト)
@@ -1558,10 +1560,20 @@ def send_zoom_reminder_email(
     except Exception as e:
         return False, f"メールサーバーへの接続に失敗しました: {str(e)}", [], []
 
+    # フォローアップの場合はタイトルを変更
+    if is_followup or "フォローアップ" in meeting_title:
+        subject_prefix = "【フォローアップリマインダー】"
+        header_text = "🔄 フォローアップミーティングリマインダー"
+        intro_text = "フォローアップミーティングがまもなく始まります！"
+    else:
+        subject_prefix = "【リマインダー】"
+        header_text = "🔔 ミーティングリマインダー"
+        intro_text = "まもなくミーティングが始まります！"
+
     for recipient in recipients:
         try:
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"【リマインダー】{meeting_title} - Zoomミーティングのお知らせ"
+            msg['Subject'] = f"{subject_prefix}{meeting_title} - Zoomミーティングのお知らせ"
             msg['From'] = sender_email
             msg['To'] = recipient['email']
 
@@ -1571,7 +1583,7 @@ def send_zoom_reminder_email(
             text_body = f"""
 {recipient['name']} 様
 
-まもなくミーティングが始まります！
+{intro_text}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 ミーティング名：{meeting_title}
@@ -1594,11 +1606,11 @@ AI学習チェックリスト
 </head>
 <body style="font-family: 'メイリオ', sans-serif; font-size: 20px; line-height: 1.8; color: #333; max-width: 800px; margin: 0 auto; padding: 20px;">
     <div style="background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); color: white; padding: 30px; border-radius: 15px; margin-bottom: 30px; text-align: center;">
-        <h1 style="margin: 0; font-size: 32px;">🔔 ミーティングリマインダー</h1>
+        <h1 style="margin: 0; font-size: 32px;">{header_text}</h1>
     </div>
 
     <p style="font-size: 24px;"><strong>{recipient['name']}</strong> 様</p>
-    <p style="font-size: 22px;">まもなくミーティングが始まります！</p>
+    <p style="font-size: 22px;">{intro_text}</p>
 
     <div style="background-color: #e8f5e9; padding: 30px; border-radius: 15px; border: 3px solid #4CAF50; margin: 25px 0;">
         <p style="font-size: 24px; margin: 10px 0;">📅 <strong>{meeting_title}</strong></p>
@@ -2110,13 +2122,17 @@ def send_auto_reminder(meeting_id: int, reminder_type: str = 'reminder_24h') -> 
 
     recipients = [{'name': p['name'], 'email': p['email']} for p in participants]
 
+    # フォローアップミーティングかどうか確認
+    is_followup = "フォローアップ" in meeting['title']
+
     # リマインダーメールを送信
     success, message, success_list, failed_list = send_zoom_reminder_email(
         meeting['title'],
         meeting.get('scheduled_at', ''),
         recipients,
         meeting.get('zoom_url', ''),
-        meeting.get('zoom_passcode')
+        meeting.get('zoom_passcode'),
+        is_followup=is_followup
     )
 
     # 送信記録を保存
@@ -2124,6 +2140,123 @@ def send_auto_reminder(meeting_id: int, reminder_type: str = 'reminder_24h') -> 
         log_reminder_sent(meeting_id, reminder_type, len(success_list))
 
     return success, message, len(success_list)
+
+
+def send_single_meeting_invitation(
+    recipient_email: str,
+    recipient_name: str,
+    meeting_title: str,
+    meeting_description: str,
+    formatted_date: str,
+    group_name: str,
+    host_name: str,
+    zoom_url: str = None,
+    zoom_passcode: str = None,
+    is_followup: bool = False
+) -> bool:
+    """
+    単一の招待メールを送信（フォローアップミーティング用）
+    """
+    sender_email, sender_password = get_email_config()
+    
+    if not sender_email or not sender_password:
+        return False
+    
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+    except Exception as e:
+        return False
+    
+    # フォローアップの場合はタイトルを変更
+    if is_followup:
+        subject = f"【フォローアップミーティングのお知らせ】{meeting_title}"
+        intro_text = "フォローアップミーティングのご案内です。"
+    else:
+        subject = f"【ミーティングのお知らせ】{meeting_title}"
+        intro_text = "ミーティングのご案内です。"
+    
+    # Zoom情報のHTML
+    zoom_info_html = ""
+    if zoom_url:
+        zoom_info_html = f"""
+    <div style="background-color: #e3f2fd; padding: 30px; border-radius: 15px; border: 3px solid #2196f3; margin: 25px 0; text-align: center;">
+        <h3 style="color: #1565c0; margin-top: 0; font-size: 28px;">📹 Zoomミーティング情報</h3>
+        <a href="{zoom_url}" style="display: inline-block; background-color: #2196f3; color: white; padding: 20px 40px; font-size: 24px; text-decoration: none; border-radius: 10px; font-weight: bold; margin: 15px 0;">
+            🚀 ここをクリックしてZoomに参加
+        </a>
+        <p style="font-size: 20px; margin: 15px 0;"><strong>URL:</strong> {zoom_url}</p>
+"""
+        if zoom_passcode:
+            zoom_info_html += f'        <p style="font-size: 20px; margin: 10px 0;"><strong>🔑 パスコード:</strong> {zoom_passcode}</p>\n'
+        zoom_info_html += "    </div>"
+    
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = sender_email
+        msg['To'] = recipient_email
+        
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+</head>
+<body style="font-family: 'Hiragino Sans', 'Meiryo', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+    <div style="background-color: white; padding: 40px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+        <h1 style="color: #1976d2; text-align: center; font-size: 32px; border-bottom: 3px solid #1976d2; padding-bottom: 20px;">
+            {'🔄' if is_followup else '📅'} {meeting_title}
+        </h1>
+        
+        <p style="font-size: 24px; color: #333; margin: 25px 0;">
+            {recipient_name}様
+        </p>
+        
+        <p style="font-size: 20px; color: #333; line-height: 1.8;">
+            {intro_text}
+        </p>
+        
+        <div style="background-color: #fff8e1; padding: 25px; border-radius: 15px; border: 3px solid #ff9800; margin: 25px 0;">
+            <h3 style="color: #f57c00; margin-top: 0; font-size: 24px;">📋 ミーティング詳細</h3>
+            <table style="width: 100%; font-size: 20px; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 10px 0; font-weight: bold; width: 120px;">📌 タイトル:</td>
+                    <td style="padding: 10px 0;">{meeting_title}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; font-weight: bold;">📅 日時:</td>
+                    <td style="padding: 10px 0;">{formatted_date}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; font-weight: bold;">👥 グループ:</td>
+                    <td style="padding: 10px 0;">{group_name}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; font-weight: bold;">👤 ホスト:</td>
+                    <td style="padding: 10px 0;">{host_name}</td>
+                </tr>
+            </table>
+            {f'<p style="font-size: 18px; margin-top: 15px; color: #555;"><strong>説明:</strong> {meeting_description}</p>' if meeting_description else ''}
+        </div>
+        
+        {zoom_info_html}
+        
+        <p style="font-size: 18px; color: #666; text-align: center; margin-top: 30px;">
+            ご参加をお待ちしております。
+        </p>
+    </div>
+</body>
+</html>
+"""
+        
+        msg.attach(MIMEText(html_body, 'html'))
+        server.sendmail(sender_email, recipient_email, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        return False
 
 
 # データベース初期化
