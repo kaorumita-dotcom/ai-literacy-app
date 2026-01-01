@@ -1781,7 +1781,7 @@ def show_meeting_detail_page():
                             members = db.get_group_members(meeting['group_id'])
                             sent_count = 0
                             for member in members:
-                                if member['user_id'] != user['id']:  # ホスト以外に送信
+                                if member['id'] != user['id']:  # ホスト以外に送信
                                     email_success = db.send_single_meeting_invitation(
                                         member['email'],
                                         member['name'],
