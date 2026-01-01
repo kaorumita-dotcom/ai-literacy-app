@@ -222,24 +222,73 @@ st.markdown("""
         margin-bottom: 10px !important;
     }
 
-    /* 入力フィールドを大きく */
-    .stTextInput input, .stTextArea textarea, .stSelectbox select {
-        font-size: 22px !important;
-        padding: 15px !important;
-        min-height: 60px !important;
-        border: 3px solid #bdbdbd !important;
-        border-radius: 12px !important;
-    }
-
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: #1976d2 !important;
-        box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.2) !important;
-    }
-
-    .stTextInput label, .stTextArea label, .stSelectbox label {
+    /* ========================================
+       入力フィールドを大きく・目立つように
+       ======================================== */
+    .stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
         font-size: 24px !important;
+        padding: 20px !important;
+        min-height: 70px !important;
+        border: 4px solid #1976d2 !important;
+        border-radius: 15px !important;
+        background-color: #ffffff !important;
+        color: #333333 !important;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+
+    /* プレースホルダーを見やすく */
+    .stTextInput input::placeholder, .stTextArea textarea::placeholder {
+        color: #888888 !important;
+        font-size: 22px !important;
+    }
+
+    /* フォーカス時のスタイル */
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: #ff9800 !important;
+        border-width: 5px !important;
+        box-shadow: 0 0 0 4px rgba(255, 152, 0, 0.3), inset 0 2px 4px rgba(0,0,0,0.1) !important;
+        outline: none !important;
+    }
+
+    /* ラベルを大きく */
+    .stTextInput label, .stTextArea label, .stSelectbox label {
+        font-size: 26px !important;
         font-weight: bold !important;
-        color: #424242 !important;
+        color: #1565c0 !important;
+        margin-bottom: 10px !important;
+    }
+
+    /* セレクトボックスのドロップダウン */
+    .stSelectbox > div > div {
+        min-height: 70px !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+
+    /* 日付・時刻入力も大きく */
+    .stDateInput input, .stTimeInput input {
+        font-size: 24px !important;
+        padding: 20px !important;
+        min-height: 70px !important;
+        border: 4px solid #1976d2 !important;
+        border-radius: 15px !important;
+        background-color: #ffffff !important;
+    }
+
+    .stDateInput label, .stTimeInput label {
+        font-size: 26px !important;
+        font-weight: bold !important;
+        color: #1565c0 !important;
+    }
+
+    /* チェックボックスも見やすく */
+    .stCheckbox label {
+        font-size: 24px !important;
+        padding: 15px !important;
+    }
+
+    .stCheckbox label span {
+        font-size: 24px !important;
     }
 
     /* テーブルのスタイル */
@@ -376,13 +425,6 @@ st.markdown("""
         font-size: 24px !important;
         font-weight: bold !important;
         padding: 15px !important;
-    }
-
-    /* 日付・時刻入力 */
-    .stDateInput input, .stTimeInput input {
-        font-size: 22px !important;
-        padding: 12px !important;
-        min-height: 55px !important;
     }
 
     </style>
