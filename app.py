@@ -223,54 +223,27 @@ st.markdown("""
     }
 
     /* ========================================
-       入力フィールドを大きく・目立つように
+       入力フィールドのスタイル（シンプル版）
        ======================================== */
     
-    /* 入力欄を大きく - ボーダーを細めに */
-    input[type="text"], 
-    input[type="email"], 
-    input[type="password"],
-    input[type="number"],
-    .stTextInput input,
-    .stTextInput > div > div > input,
-    [data-testid="stTextInput"] input,
-    [data-baseweb="input"] input {
-        font-size: 22px !important;
-        padding: 12px 15px !important;
-        border: 2px solid #1976d2 !important;
-        border-radius: 10px !important;
-        background-color: #ffffff !important;
-        color: #333333 !important;
-    }
-
-    /* テキストエリアも大きく */
-    textarea,
-    .stTextArea textarea,
-    [data-testid="stTextArea"] textarea {
-        font-size: 22px !important;
-        padding: 12px 15px !important;
-        border: 2px solid #1976d2 !important;
-        border-radius: 10px !important;
-        background-color: #ffffff !important;
-        color: #333333 !important;
-    }
-
-    /* プレースホルダーを見やすく */
-    input::placeholder, 
-    textarea::placeholder,
-    .stTextInput input::placeholder, 
-    .stTextArea textarea::placeholder {
-        color: #999999 !important;
+    /* テキスト入力欄のみスタイル適用 */
+    .stTextInput input {
         font-size: 20px !important;
+        border: 2px solid #1976d2 !important;
+        border-radius: 8px !important;
+    }
+
+    /* テキストエリア */
+    .stTextArea textarea {
+        font-size: 20px !important;
+        border: 2px solid #1976d2 !important;
+        border-radius: 8px !important;
     }
 
     /* フォーカス時のスタイル */
-    input:focus, 
-    textarea:focus,
     .stTextInput input:focus, 
     .stTextArea textarea:focus {
         border-color: #ff9800 !important;
-        border-width: 3px !important;
         box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.3) !important;
         outline: none !important;
     }
@@ -280,36 +253,15 @@ st.markdown("""
     .stTextArea label,
     .stSelectbox label,
     .stDateInput label,
-    .stTimeInput label,
-    [data-testid="stTextInput"] label,
-    [data-testid="stTextArea"] label,
-    [data-testid="stSelectbox"] label {
-        font-size: 24px !important;
+    .stTimeInput label {
+        font-size: 22px !important;
         font-weight: bold !important;
         color: #1565c0 !important;
-        margin-bottom: 5px !important;
-    }
-
-    /* 日付・時刻入力も見やすく */
-    .stDateInput input, 
-    .stTimeInput input,
-    [data-testid="stDateInput"] input,
-    [data-testid="stTimeInput"] input {
-        font-size: 20px !important;
-        padding: 10px !important;
-        border: 2px solid #1976d2 !important;
-        border-radius: 10px !important;
-        background-color: #ffffff !important;
     }
 
     /* チェックボックスも見やすく */
     .stCheckbox label {
-        font-size: 24px !important;
-        padding: 15px !important;
-    }
-
-    .stCheckbox label span {
-        font-size: 24px !important;
+        font-size: 22px !important;
     }
 
     /* テーブルのスタイル */
