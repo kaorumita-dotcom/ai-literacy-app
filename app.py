@@ -1219,14 +1219,33 @@ def show_meetings_page():
     st.title("📹 ミーティング")
     st.markdown("---")
 
-    # タブで機能を分割
+    # ホストの場合はタブ切り替えを表示
     if user['role'] == 'host':
-        tab1, tab2 = st.tabs(["📋 ミーティング一覧", "➕ 新規作成"])
-
-        with tab1:
+        # セッションステートでタブを管理
+        if 'meeting_view' not in st.session_state:
+            st.session_state.meeting_view = 'list'
+        
+        # タブ風のボタンを作成
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📋 ミーティング一覧", 
+                        type="primary" if st.session_state.meeting_view == 'list' else "secondary",
+                        use_container_width=True):
+                st.session_state.meeting_view = 'list'
+                st.rerun()
+        with col2:
+            if st.button("➕ 新規作成", 
+                        type="primary" if st.session_state.meeting_view == 'create' else "secondary",
+                        use_container_width=True):
+                st.session_state.meeting_view = 'create'
+                st.rerun()
+        
+        st.markdown("---")
+        
+        # 選択されたビューを表示
+        if st.session_state.meeting_view == 'list':
             show_meetings_list(user)
-
-        with tab2:
+        else:
             show_create_meeting(user)
     else:
         show_meetings_list(user)
@@ -1500,6 +1519,7 @@ def show_create_meeting(user):
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("📅 ミーティング一覧を見る", type="primary", use_container_width=True):
+                        st.session_state.meeting_view = 'list'  # 一覧ビューに切り替え
                         st.session_state.selected_meeting = meeting_id
                         st.rerun()
                 with col2:
