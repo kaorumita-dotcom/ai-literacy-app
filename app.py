@@ -1329,6 +1329,7 @@ def show_create_meeting(user):
             if success:
                 # 招待メール送信
                 email_result = ""
+                pending_email_result = ""
                 if send_invitation:
                     with st.spinner("📧 参加者に招待メールを送信中..."):
                         # リマインダーテーブルを初期化
@@ -1336,25 +1337,55 @@ def show_create_meeting(user):
 
                         # グループ情報を取得
                         group = db.get_group_by_id(selected_group_id)
+
+                        # 1. 登録済みメンバーにメール送信
                         participants = db.get_meeting_participants(meeting_id)
                         recipients = [{'name': p['name'], 'email': p['email']} for p in participants]
 
-                        email_success, email_message, success_list, failed_list = db.send_meeting_invitation_email(
-                            meeting_id=meeting_id,
-                            meeting_title=meeting_title,
-                            meeting_description=meeting_description,
-                            scheduled_at=scheduled_at,
-                            host_name=user['name'],
-                            group_name=group['name'] if group else '',
-                            recipients=recipients,
-                            zoom_url=zoom_url if zoom_url else None,
-                            zoom_passcode=zoom_passcode if zoom_passcode else None
-                        )
+                        if recipients:
+                            email_success, email_message, success_list, failed_list = db.send_meeting_invitation_email(
+                                meeting_id=meeting_id,
+                                meeting_title=meeting_title,
+                                meeting_description=meeting_description,
+                                scheduled_at=scheduled_at,
+                                host_name=user['name'],
+                                group_name=group['name'] if group else '',
+                                recipients=recipients,
+                                zoom_url=zoom_url if zoom_url else None,
+                                zoom_passcode=zoom_passcode if zoom_passcode else None
+                            )
 
-                        if email_success:
-                            email_result = f"<br>📧 {email_message}"
+                            if email_success:
+                                email_result = f"<br>📧 登録済み: {email_message}"
+
+                        # 2. 未登録の招待者にもメール送信
+                        pending_invitations = db.get_pending_invitations_by_group(selected_group_id)
+                        pending_emails = [inv['email'] for inv in pending_invitations]
+
+                        if pending_emails:
+                            # アプリのURLを取得（Streamlit Cloud用）
+                            app_url = "https://ai-literacy-app-9wdvlbxqk77oscqse9rpkq.streamlit.app"
+
+                            pending_success, pending_message, pending_success_list, pending_failed_list = db.send_meeting_invitation_to_pending(
+                                meeting_title=meeting_title,
+                                meeting_description=meeting_description,
+                                scheduled_at=scheduled_at,
+                                host_name=user['name'],
+                                group_name=group['name'] if group else '',
+                                pending_emails=pending_emails,
+                                app_url=app_url,
+                                zoom_url=zoom_url if zoom_url else None,
+                                zoom_passcode=zoom_passcode if zoom_passcode else None
+                            )
+
+                            if pending_success and pending_success_list:
+                                pending_email_result = f"<br>📧 未登録者: {pending_message}"
 
                 # 成功メッセージを大きく表示
+                combined_email_result = email_result + pending_email_result
+                if not combined_email_result and send_invitation:
+                    combined_email_result = "<br>📧 送信対象者がいませんでした"
+
                 st.markdown(f"""
                 <div style="
                     background-color: #d4edda;
@@ -1369,7 +1400,7 @@ def show_create_meeting(user):
                         ミーティング「{meeting_title}」を作成しました！
                     </p>
                     <p style="font-size: 22px; color: #155724;">
-                        {email_result}
+                        {combined_email_result}
                     </p>
                     <p style="font-size: 20px; color: #155724; margin-top: 15px;">
                         3秒後に画面が切り替わります...
