@@ -328,18 +328,10 @@ st.markdown("""
         box-shadow: 0 3px 6px rgba(0,0,0,0.2);
     }
 
-    .step-container {
-        display: flex;
-        align-items: center;
-        padding: 20px;
-        background-color: #fff8e1;
-        border-radius: 15px;
-        margin-bottom: 30px;
-        border-left: 5px solid #ff9800;
-    }
+    /* step-containerは使用しない（インラインスタイルに移行） */
 
     .step-text {
-        font-size: 24px;
+        font-size: 22px;
         color: #333;
     }
 
@@ -451,29 +443,30 @@ def show_step(number, text):
     <div style="
         display: flex;
         align-items: center;
-        padding: 20px;
-        background-color: #fff8e1;
-        border-radius: 15px;
+        padding: 15px 20px;
+        background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+        border-radius: 50px;
         margin-top: 30px;
         margin-bottom: 10px;
-        border-left: 5px solid #ff9800;
+        border: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     ">
         <span style="
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 50px;
-            height: 50px;
+            width: 45px;
+            height: 45px;
             background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
             color: white;
-            font-size: 28px;
+            font-size: 24px;
             font-weight: bold;
             border-radius: 50%;
             margin-right: 15px;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             flex-shrink: 0;
         ">{number}</span>
-        <span style="font-size: 24px; color: #333;">{text}</span>
+        <span style="font-size: 22px; color: #333; font-weight: 500;">{text}</span>
     </div>
     """, unsafe_allow_html=True)
     # 余白を追加
@@ -850,29 +843,38 @@ def show_dashboard():
 
             # カードの色を日数によって変更
             if days_until <= 1:
-                card_style = 'background-color: #fff3cd; border: 4px solid #ffc107;'  # 黄色（緊急）
-                urgency_color = '#856404'
+                border_color = '#ffc107'  # 黄色（緊急）
+                bg_color = '#fff3cd'
             elif days_until <= 3:
-                card_style = 'background-color: #d1ecf1; border: 4px solid #17a2b8;'  # 青（近い）
-                urgency_color = '#0c5460'
+                border_color = '#17a2b8'  # 青（近い）
+                bg_color = '#d1ecf1'
             else:
-                card_style = 'background-color: #d4edda; border: 4px solid #28a745;'  # 緑（余裕あり）
-                urgency_color = '#155724'
-
-            st.markdown(f'<div class="group-card" style="{card_style}">', unsafe_allow_html=True)
+                border_color = '#28a745'  # 緑（余裕あり）
+                bg_color = '#d4edda'
 
             # リマインダーメッセージ
             if days_until == 0:
-                reminder_text = "🔔 **本日開催！**"
+                reminder_text = "🔔 本日開催！"
             elif days_until == 1:
-                reminder_text = "⏰ **明日開催！**"
+                reminder_text = "⏰ 明日開催！"
             else:
-                reminder_text = f"📆 **あと{days_until}日**"
+                reminder_text = f"📆 あと{days_until}日"
 
-            st.markdown(f"### {reminder_text} {meeting['title']}")
-            st.markdown(f"**グループ:** {meeting['group_name']}")
-            st.markdown(f"**日時:** {scheduled_dt.strftime('%Y年%m月%d日 %H:%M')}")
-            st.markdown(f"**ホスト:** {meeting['host_name']}")
+            # カード全体を1つのmarkdownで表示
+            st.markdown(f"""
+            <div style="
+                background-color: {bg_color};
+                border: 4px solid {border_color};
+                border-radius: 15px;
+                padding: 20px;
+                margin-bottom: 20px;
+            ">
+                <h3 style="margin-top: 0; color: #333;">{reminder_text} {meeting['title']}</h3>
+                <p><strong>グループ:</strong> {meeting['group_name']}</p>
+                <p><strong>日時:</strong> {scheduled_dt.strftime('%Y年%m月%d日 %H:%M')}</p>
+                <p><strong>ホスト:</strong> {meeting['host_name']}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
             # Zoom URLがある場合は参加ボタンを表示
             if meeting.get('zoom_url'):
@@ -887,8 +889,7 @@ def show_dashboard():
                     st.session_state.page = 'meeting_detail'
                     st.rerun()
 
-            st.markdown('</div>', unsafe_allow_html=True)
-            st.markdown("")
+            st.markdown("---")
     else:
         st.info("📭 今後7日間の予定はありません")
 
@@ -899,10 +900,20 @@ def show_dashboard():
         st.markdown("## 📧 グループへの招待")
 
         for invitation in invitations:
-            st.markdown(f'<div class="group-card" style="border: 4px solid #28a745; background-color: #d4edda;">', unsafe_allow_html=True)
-            st.markdown(f"### 🎉 {invitation['group_name']} への招待")
-            st.markdown(f"**説明:** {invitation['description']}")
-            st.markdown(f"**招待者:** {invitation['invited_by_name']}")
+            # 招待カードを1つのmarkdownで表示
+            st.markdown(f"""
+            <div style="
+                background-color: #d4edda;
+                border: 4px solid #28a745;
+                border-radius: 15px;
+                padding: 20px;
+                margin-bottom: 15px;
+            ">
+                <h3 style="margin-top: 0; color: #155724;">🎉 {invitation['group_name']} への招待</h3>
+                <p><strong>説明:</strong> {invitation['description'] if invitation['description'] else '（なし）'}</p>
+                <p><strong>招待者:</strong> {invitation['invited_by_name']}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
             col1, col2 = st.columns(2)
             with col1:
@@ -922,7 +933,7 @@ def show_dashboard():
                     else:
                         st.error(f"❌ {message}")
 
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown("---")
 
 # チェックリストページ
 def show_checklist_page():
@@ -1331,7 +1342,8 @@ def show_create_meeting(user):
     with col1:
         meeting_date = st.date_input("日付", key="meeting_date")
     with col2:
-        meeting_time = st.time_input("時刻", key="meeting_time")
+        from datetime import time as dt_time
+        meeting_time = st.time_input("時刻", value=dt_time(12, 0), key="meeting_time")
 
     st.markdown("---")
 
@@ -1479,12 +1491,20 @@ def show_create_meeting(user):
                 """, unsafe_allow_html=True)
                 st.balloons()
                 
+                # 成功メッセージをセッションに保存
+                st.session_state.success_message = f"✅ ミーティング「{meeting_title}」を作成しました！"
+                st.session_state.success_type = "success"
+                
                 # ボタンで画面遷移
                 st.markdown("")
-                if st.button("📅 ミーティング一覧を見る", type="primary", use_container_width=True):
-                    st.session_state.selected_meeting = meeting_id
-                    st.session_state.page = 'meetings'
-                    st.rerun()
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("📅 ミーティング一覧を見る", type="primary", use_container_width=True):
+                        st.session_state.selected_meeting = meeting_id
+                        st.rerun()
+                with col2:
+                    if st.button("➕ 別のミーティングを作成", type="secondary", use_container_width=True):
+                        st.rerun()
             else:
                 st.error(f"❌ {message}")
         else:
