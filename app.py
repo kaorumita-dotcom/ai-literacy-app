@@ -225,21 +225,36 @@ st.markdown("""
     /* ========================================
        入力フィールドを大きく・目立つように
        ======================================== */
-    .stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
-        font-size: 24px !important;
-        padding: 20px !important;
-        min-height: 70px !important;
+    .stTextInput > div, .stTextArea > div, .stSelectbox > div {
+        margin-top: 5px !important;
+        margin-bottom: 15px !important;
+    }
+
+    .stTextInput input, .stTextArea textarea {
+        font-size: 26px !important;
+        padding: 22px 20px !important;
+        min-height: 75px !important;
         border: 4px solid #1976d2 !important;
         border-radius: 15px !important;
         background-color: #ffffff !important;
         color: #333333 !important;
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1) !important;
+        box-shadow: inset 0 3px 6px rgba(0,0,0,0.1) !important;
+        width: 100% !important;
+    }
+
+    .stSelectbox > div > div {
+        font-size: 26px !important;
+        padding: 15px 20px !important;
+        min-height: 75px !important;
+        border: 4px solid #1976d2 !important;
+        border-radius: 15px !important;
+        background-color: #ffffff !important;
     }
 
     /* プレースホルダーを見やすく */
     .stTextInput input::placeholder, .stTextArea textarea::placeholder {
-        color: #888888 !important;
-        font-size: 22px !important;
+        color: #999999 !important;
+        font-size: 24px !important;
     }
 
     /* フォーカス時のスタイル */
@@ -250,12 +265,14 @@ st.markdown("""
         outline: none !important;
     }
 
-    /* ラベルを大きく */
+    /* ラベルを大きく・見やすく */
     .stTextInput label, .stTextArea label, .stSelectbox label {
         font-size: 26px !important;
         font-weight: bold !important;
         color: #1565c0 !important;
-        margin-bottom: 10px !important;
+        margin-bottom: 15px !important;
+        display: block !important;
+        padding-bottom: 8px !important;
     }
 
     /* セレクトボックスのドロップダウン */
@@ -279,6 +296,9 @@ st.markdown("""
         font-size: 26px !important;
         font-weight: bold !important;
         color: #1565c0 !important;
+        margin-bottom: 15px !important;
+        display: block !important;
+        padding-bottom: 8px !important;
     }
 
     /* チェックボックスも見やすく */
@@ -361,13 +381,19 @@ st.markdown("""
         padding: 20px;
         background-color: #fff8e1;
         border-radius: 15px;
-        margin-bottom: 15px;
+        margin-bottom: 30px;
         border-left: 5px solid #ff9800;
     }
 
     .step-text {
         font-size: 24px;
         color: #333;
+    }
+
+    /* 入力フィールドの上の余白を確保 */
+    .stTextInput, .stTextArea, .stSelectbox, .stDateInput, .stTimeInput {
+        margin-top: 10px !important;
+        margin-bottom: 25px !important;
     }
 
     /* ========================================
@@ -469,9 +495,32 @@ def calculate_progress(checklist_data):
 def show_step(number, text):
     """操作手順を番号付きで表示"""
     st.markdown(f"""
-    <div class="step-container">
-        <span class="step-number">{number}</span>
-        <span class="step-text">{text}</span>
+    <div style="
+        display: flex;
+        align-items: center;
+        padding: 20px;
+        background-color: #fff8e1;
+        border-radius: 15px;
+        margin-top: 25px;
+        margin-bottom: 20px;
+        border-left: 5px solid #ff9800;
+    ">
+        <span style="
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            border-radius: 50%;
+            margin-right: 15px;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+            flex-shrink: 0;
+        ">{number}</span>
+        <span style="font-size: 24px; color: #333;">{text}</span>
     </div>
     """, unsafe_allow_html=True)
 
