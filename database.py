@@ -1,6 +1,7 @@
 """
 データベース管理モジュール
 ユーザー、グループ、チェックリストの永続化を管理
+Zoom連携機能追加版
 """
 
 import sqlite3
@@ -113,7 +114,7 @@ def init_database():
         )
     """)
 
-    # ミーティングテーブル
+    # ミーティングテーブル（Zoom URL追加）
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS meetings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,11 +123,30 @@ def init_database():
             group_id INTEGER NOT NULL,
             host_id INTEGER NOT NULL,
             scheduled_at TIMESTAMP,
+            zoom_url TEXT,
+            zoom_meeting_id TEXT,
+            zoom_passcode TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (group_id) REFERENCES groups(id),
             FOREIGN KEY (host_id) REFERENCES users(id)
         )
     """)
+
+    # 既存のmeetingsテーブルにzoom_url列がない場合は追加
+    try:
+        cursor.execute("ALTER TABLE meetings ADD COLUMN zoom_url TEXT")
+    except sqlite3.OperationalError:
+        pass  # 既に存在する場合はスキップ
+
+    try:
+        cursor.execute("ALTER TABLE meetings ADD COLUMN zoom_meeting_id TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE meetings ADD COLUMN zoom_passcode TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     # ミーティング参加者テーブル
     cursor.execute("""
@@ -505,17 +525,19 @@ def get_group_progress(group_id: int) -> List[Dict]:
     conn.close()
     return progress
 
-# ミーティング関連の関数
+# ミーティング関連の関数（Zoom連携追加）
 
-def create_meeting(title: str, description: str, group_id: int, host_id: int, scheduled_at: str) -> Tuple[bool, str, Optional[int]]:
-    """新規ミーティングを作成"""
+def create_meeting(title: str, description: str, group_id: int, host_id: int, scheduled_at: str,
+                   zoom_url: str = None, zoom_meeting_id: str = None, zoom_passcode: str = None) -> Tuple[bool, str, Optional[int]]:
+    """新規ミーティングを作成（Zoom情報含む）"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
 
         cursor.execute(
-            "INSERT INTO meetings (title, description, group_id, host_id, scheduled_at) VALUES (?, ?, ?, ?, ?)",
-            (title, description, group_id, host_id, scheduled_at)
+            """INSERT INTO meetings (title, description, group_id, host_id, scheduled_at, zoom_url, zoom_meeting_id, zoom_passcode)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (title, description, group_id, host_id, scheduled_at, zoom_url, zoom_meeting_id, zoom_passcode)
         )
         meeting_id = cursor.lastrowid
 
@@ -530,6 +552,24 @@ def create_meeting(title: str, description: str, group_id: int, host_id: int, sc
         return True, "ミーティングを作成しました", meeting_id
     except Exception as e:
         return False, f"エラーが発生しました: {str(e)}", None
+
+def update_meeting_zoom_info(meeting_id: int, zoom_url: str = None, zoom_meeting_id: str = None, zoom_passcode: str = None) -> Tuple[bool, str]:
+    """ミーティングのZoom情報を更新"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE meetings
+            SET zoom_url = ?, zoom_meeting_id = ?, zoom_passcode = ?
+            WHERE id = ?
+        """, (zoom_url, zoom_meeting_id, zoom_passcode, meeting_id))
+
+        conn.commit()
+        conn.close()
+        return True, "Zoom情報を更新しました"
+    except Exception as e:
+        return False, f"エラーが発生しました: {str(e)}"
 
 def get_meetings_by_group(group_id: int) -> List[Dict]:
     """グループのミーティング一覧を取得"""
@@ -1213,10 +1253,12 @@ def send_minutes_email(
     meeting_title: str,
     scheduled_at: str,
     minutes_content: str,
-    recipients: List[Dict]
+    recipients: List[Dict],
+    zoom_url: str = None,
+    zoom_passcode: str = None
 ) -> Tuple[bool, str, List[str], List[str]]:
     """
-    議事録をメールで参加者に送信
+    議事録をメールで参加者に送信（Zoom情報含む）
 
     Args:
         meeting_id: ミーティングID
@@ -1224,6 +1266,8 @@ def send_minutes_email(
         scheduled_at: 開催日時
         minutes_content: 議事録の内容
         recipients: 送信先リスト [{'name': '名前', 'email': 'メールアドレス'}, ...]
+        zoom_url: ZoomミーティングURL（オプション）
+        zoom_passcode: Zoomパスコード（オプション）
 
     Returns:
         (成功, メッセージ, 送信成功リスト, 送信失敗リスト)
@@ -1255,6 +1299,28 @@ def send_minutes_email(
     except Exception as e:
         return False, f"メールサーバーへの接続に失敗しました: {str(e)}", [], []
 
+    # Zoom情報のテキスト
+    zoom_info_text = ""
+    zoom_info_html = ""
+    if zoom_url:
+        zoom_info_text = f"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📹 Zoomミーティング情報
+URL: {zoom_url}
+"""
+        if zoom_passcode:
+            zoom_info_text += f"パスコード: {zoom_passcode}\n"
+        zoom_info_text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+
+        zoom_info_html = f"""
+    <div style="background-color: #e3f2fd; padding: 25px; border-radius: 10px; border-left: 5px solid #2196f3; margin: 20px 0;">
+        <h3 style="color: #1565c0; margin-top: 0;">📹 Zoomミーティング情報</h3>
+        <p style="font-size: 20px; margin: 10px 0;"><strong>URL:</strong> <a href="{zoom_url}" style="color: #1976d2;">{zoom_url}</a></p>
+"""
+        if zoom_passcode:
+            zoom_info_html += f'        <p style="font-size: 20px; margin: 10px 0;"><strong>パスコード:</strong> {zoom_passcode}</p>\n'
+        zoom_info_html += "    </div>"
+
     # 各受信者にメールを送信
     for recipient in recipients:
         try:
@@ -1275,7 +1341,7 @@ def send_minutes_email(
 📅 ミーティング名：{meeting_title}
 📆 開催日時：{formatted_date}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+{zoom_info_text}
 {minutes_content}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1353,6 +1419,8 @@ AI学習チェックリスト
         <p>📆 <strong>開催日時：</strong>{formatted_date}</p>
     </div>
 
+    {zoom_info_html}
+
     <div class="minutes-content">
         {minutes_content.replace(chr(10), '<br>')}
     </div>
@@ -1392,6 +1460,132 @@ AI学習チェックリスト
     else:
         result_message = f"⚠️ {len(success_list)}名に送信成功、{len(failed_list)}名に送信失敗"
         return True, result_message, success_list, failed_list
+
+
+def send_zoom_reminder_email(
+    meeting_title: str,
+    scheduled_at: str,
+    recipients: List[Dict],
+    zoom_url: str,
+    zoom_passcode: str = None
+) -> Tuple[bool, str, List[str], List[str]]:
+    """
+    Zoomミーティングのリマインダーメールを送信
+
+    Args:
+        meeting_title: ミーティングタイトル
+        scheduled_at: 開催日時
+        recipients: 送信先リスト
+        zoom_url: ZoomミーティングURL
+        zoom_passcode: Zoomパスコード（オプション）
+
+    Returns:
+        (成功, メッセージ, 送信成功リスト, 送信失敗リスト)
+    """
+    # メール設定を取得
+    sender_email, sender_password = get_email_config()
+
+    if not sender_email or not sender_password:
+        return False, "メール設定が見つかりません。", [], []
+
+    # 日時の整形
+    try:
+        dt = datetime.fromisoformat(scheduled_at)
+        formatted_date = dt.strftime('%Y年%m月%d日 %H:%M')
+    except:
+        formatted_date = scheduled_at
+
+    success_list = []
+    failed_list = []
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+    except Exception as e:
+        return False, f"メールサーバーへの接続に失敗しました: {str(e)}", [], []
+
+    for recipient in recipients:
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"【リマインダー】{meeting_title} - Zoomミーティングのお知らせ"
+            msg['From'] = sender_email
+            msg['To'] = recipient['email']
+
+            passcode_text = f"\n🔑 パスコード：{zoom_passcode}" if zoom_passcode else ""
+            passcode_html = f'<p style="font-size: 24px; margin: 15px 0;">🔑 <strong>パスコード：</strong>{zoom_passcode}</p>' if zoom_passcode else ""
+
+            text_body = f"""
+{recipient['name']} 様
+
+まもなくミーティングが始まります！
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📅 ミーティング名：{meeting_title}
+📆 開催日時：{formatted_date}
+
+📹 Zoomミーティング
+URL: {zoom_url}{passcode_text}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+上記のURLをクリックするとZoomに参加できます。
+
+AI学習チェックリスト
+            """
+
+            html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+<body style="font-family: 'メイリオ', sans-serif; font-size: 20px; line-height: 1.8; color: #333; max-width: 800px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); color: white; padding: 30px; border-radius: 15px; margin-bottom: 30px; text-align: center;">
+        <h1 style="margin: 0; font-size: 32px;">🔔 ミーティングリマインダー</h1>
+    </div>
+
+    <p style="font-size: 24px;"><strong>{recipient['name']}</strong> 様</p>
+    <p style="font-size: 22px;">まもなくミーティングが始まります！</p>
+
+    <div style="background-color: #e8f5e9; padding: 30px; border-radius: 15px; border: 3px solid #4CAF50; margin: 25px 0;">
+        <p style="font-size: 24px; margin: 10px 0;">📅 <strong>{meeting_title}</strong></p>
+        <p style="font-size: 24px; margin: 10px 0;">📆 <strong>{formatted_date}</strong></p>
+    </div>
+
+    <div style="background-color: #e3f2fd; padding: 30px; border-radius: 15px; border: 3px solid #2196f3; margin: 25px 0; text-align: center;">
+        <h2 style="color: #1565c0; margin-top: 0;">📹 Zoomに参加する</h2>
+        <a href="{zoom_url}" style="display: inline-block; background-color: #2196f3; color: white; padding: 20px 40px; font-size: 24px; text-decoration: none; border-radius: 10px; font-weight: bold; margin: 15px 0;">
+            🚀 ここをクリックして参加
+        </a>
+        {passcode_html}
+    </div>
+
+    <div style="text-align: center; color: #6c757d; font-size: 16px; padding-top: 20px; border-top: 1px solid #dee2e6;">
+        <p>AI学習チェックリスト</p>
+    </div>
+</body>
+</html>
+            """
+
+            part1 = MIMEText(text_body, 'plain', 'utf-8')
+            part2 = MIMEText(html_body, 'html', 'utf-8')
+            msg.attach(part1)
+            msg.attach(part2)
+
+            server.send_message(msg)
+            success_list.append(recipient['email'])
+
+        except Exception as e:
+            failed_list.append(f"{recipient['email']} ({str(e)})")
+
+    server.quit()
+
+    if len(failed_list) == 0:
+        return True, f"✅ {len(success_list)}名にリマインダーを送信しました！", success_list, failed_list
+    elif len(success_list) == 0:
+        return False, "❌ リマインダーの送信に失敗しました", success_list, failed_list
+    else:
+        return True, f"⚠️ {len(success_list)}名に送信成功、{len(failed_list)}名に送信失敗", success_list, failed_list
 
 
 # データベース初期化
