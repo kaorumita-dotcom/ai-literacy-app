@@ -1724,19 +1724,19 @@ def show_meeting_detail_page():
             with st.expander("📅 フォローアップミーティングを設定"):
                 st.markdown("このミーティングのフォローアップミーティングを作成できます。")
                 
-                # デフォルト日時を計算（1週間後）
+                # デフォルト日時を計算（1週間後、時刻は12:00固定）
                 from datetime import datetime, timedelta, time as dt_time
                 if meeting['scheduled_at']:
                     try:
                         original_dt = datetime.fromisoformat(meeting['scheduled_at'])
                         default_date = (original_dt + timedelta(days=7)).date()
-                        default_time = original_dt.time()
                     except:
                         default_date = (datetime.now() + timedelta(days=7)).date()
-                        default_time = dt_time(12, 0)
                 else:
                     default_date = (datetime.now() + timedelta(days=7)).date()
-                    default_time = dt_time(12, 0)
+                
+                # 時刻は常に12:00をデフォルトに
+                default_time = dt_time(12, 0)
                 
                 # 日時選択
                 st.markdown("### 📆 日時を選択")
@@ -1745,6 +1745,10 @@ def show_meeting_detail_page():
                     followup_date = st.date_input("日付", value=default_date, key="followup_date")
                 with col2:
                     followup_time = st.time_input("時刻", value=default_time, key="followup_time")
+                
+                # 招待メール送信オプション
+                st.markdown("### 📧 参加者への通知")
+                send_invitation = st.checkbox("参加者全員に招待メールを送信する", value=True, key="followup_send_invitation")
                 
                 st.markdown("")
                 
@@ -1770,7 +1774,36 @@ def show_meeting_detail_page():
                     if success:
                         # フォローアップとして関連付け
                         db.create_follow_up_meeting(meeting_id, followup_id)
-                        st.success("✅ フォローアップミーティングを作成しました！")
+                        
+                        # 招待メール送信
+                        if send_invitation:
+                            # グループメンバーに招待メールを送信
+                            members = db.get_group_members(meeting['group_id'])
+                            sent_count = 0
+                            for member in members:
+                                if member['user_id'] != user['id']:  # ホスト以外に送信
+                                    email_success = db.send_single_meeting_invitation(
+                                        member['email'],
+                                        member['name'],
+                                        followup_title,
+                                        followup_description,
+                                        followup_dt.strftime('%Y年%m月%d日 %H:%M'),
+                                        meeting['group_name'],
+                                        user['name'],
+                                        meeting.get('zoom_url'),
+                                        meeting.get('zoom_passcode'),
+                                        is_followup=True
+                                    )
+                                    if email_success:
+                                        sent_count += 1
+                            
+                            if sent_count > 0:
+                                st.success(f"✅ フォローアップミーティングを作成し、{sent_count}名に招待メールを送信しました！")
+                            else:
+                                st.success("✅ フォローアップミーティングを作成しました！")
+                        else:
+                            st.success("✅ フォローアップミーティングを作成しました！")
+                        
                         st.balloons()
                         st.rerun()
                     else:
