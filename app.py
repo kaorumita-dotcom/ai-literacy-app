@@ -669,7 +669,6 @@ def show_dashboard():
     checklist_data = db.load_user_checklist(user['id'])
     progress = calculate_progress(checklist_data)
 
-    st.markdown('<div class="progress-area">', unsafe_allow_html=True)
     st.markdown("## 📊 あなたの学習進捗")
 
     col1, col2, col3 = st.columns(3)
@@ -694,7 +693,6 @@ def show_dashboard():
         )
 
     st.progress(progress['percentage'] / 100)
-    st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -705,12 +703,23 @@ def show_dashboard():
 
     if groups:
         for group in groups:
-            st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
-            st.markdown(f"### 📁 {group['name']}")
-            if group['description']:
-                st.markdown(f"**説明:** {group['description']}")
-            st.markdown(f"**ホスト:** {group['host_name']}")
-            st.markdown(f"**メンバー数:** {group['member_count']}名")
+            # グループカードを1つのmarkdownで表示
+            st.markdown(f"""
+            <div style="
+                background-color: #fff;
+                padding: 20px;
+                border-radius: 15px;
+                margin-bottom: 20px;
+                border: 3px solid #dee2e6;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            ">
+                <h3 style="margin-top: 0; color: #333;">📁 {group['name']}</h3>
+                <p><strong>説明:</strong> {group['description'] if group['description'] else '（なし）'}</p>
+                <p><strong>ホスト:</strong> {group['host_name']}</p>
+                <p><strong>メンバー数:</strong> {group['member_count']}名</p>
+                <p>{'👑 <strong>あなたがホストです</strong>' if group['host_id'] == user['id'] else ''}</p>
+            </div>
+            """, unsafe_allow_html=True)
             
             # ホストでない場合のみ退会ボタンを表示
             if group['host_id'] != user['id']:
@@ -723,10 +732,6 @@ def show_dashboard():
                             st.rerun()
                         else:
                             st.error(f"❌ {message}")
-            else:
-                st.markdown("👑 **あなたがホストです**")
-            
-            st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.info("📭 まだグループに参加していません")
 
@@ -740,12 +745,21 @@ def show_dashboard():
 
         if hosted_groups:
             for group in hosted_groups:
-                st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
-                st.markdown(f"### 📁 {group['name']}")
-                if group['description']:
-                    st.markdown(f"**説明:** {group['description']}")
-                st.markdown(f"**メンバー数:** {group['member_count']}名")
-                st.markdown('</div>', unsafe_allow_html=True)
+                # 管理グループカードを1つのmarkdownで表示
+                st.markdown(f"""
+                <div style="
+                    background-color: #fff;
+                    padding: 20px;
+                    border-radius: 15px;
+                    margin-bottom: 20px;
+                    border: 3px solid #dee2e6;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                ">
+                    <h3 style="margin-top: 0; color: #333;">📁 {group['name']}</h3>
+                    <p><strong>説明:</strong> {group['description'] if group['description'] else '（なし）'}</p>
+                    <p><strong>メンバー数:</strong> {group['member_count']}名</p>
+                </div>
+                """, unsafe_allow_html=True)
         else:
             st.info("📭 まだグループを作成していません")
 
@@ -1125,17 +1139,26 @@ def show_groups_page():
 
         with tab2:
             st.markdown("## 📋 管理中のグループ")
-            st.markdown("")
 
             groups = db.get_groups_by_host(user['id'])
 
             if groups:
                 for group in groups:
-                    st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
-                    st.markdown(f"### 📁 {group['name']}")
-                    if group['description']:
-                        st.markdown(f"**説明:** {group['description']}")
-                    st.markdown(f"**メンバー数:** {group['member_count']}名")
+                    # グループカードを1つのmarkdownで表示
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #fff;
+                        padding: 20px;
+                        border-radius: 15px;
+                        margin-bottom: 10px;
+                        border: 3px solid #dee2e6;
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                    ">
+                        <h3 style="margin-top: 0; color: #333;">📁 {group['name']}</h3>
+                        <p><strong>説明:</strong> {group['description'] if group['description'] else '（なし）'}</p>
+                        <p><strong>メンバー数:</strong> {group['member_count']}名</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                     # メンバー表示
                     with st.expander("👥 メンバー一覧を見る"):
@@ -1179,26 +1202,34 @@ def show_groups_page():
                                     st.markdown(f"{completed}/{total} 項目")
                                 st.markdown("")
 
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    st.markdown("")
+                    st.markdown("---")
             else:
                 st.info("📭 まだグループを作成していません。「グループ作成」タブから作成してください。")
 
     else:
         # 参加者の場合：所属グループの表示
         st.markdown("## 👥 あなたが参加しているグループ")
-        st.markdown("")
 
         groups = db.get_groups_by_member(user['id'])
 
         if groups:
             for group in groups:
-                st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
-                st.markdown(f"### 📁 {group['name']}")
-                if group['description']:
-                    st.markdown(f"**説明:** {group['description']}")
-                st.markdown(f"**ホスト:** {group['host_name']}")
-                st.markdown(f"**メンバー数:** {group['member_count']}名")
+                # グループカードを1つのmarkdownで表示
+                st.markdown(f"""
+                <div style="
+                    background-color: #fff;
+                    padding: 20px;
+                    border-radius: 15px;
+                    margin-bottom: 10px;
+                    border: 3px solid #dee2e6;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                ">
+                    <h3 style="margin-top: 0; color: #333;">📁 {group['name']}</h3>
+                    <p><strong>説明:</strong> {group['description'] if group['description'] else '（なし）'}</p>
+                    <p><strong>ホスト:</strong> {group['host_name']}</p>
+                    <p><strong>メンバー数:</strong> {group['member_count']}名</p>
+                </div>
+                """, unsafe_allow_html=True)
 
                 # メンバー表示
                 with st.expander("👥 メンバー一覧を見る"):
@@ -1207,8 +1238,7 @@ def show_groups_page():
                         role_text = "👑 ホスト" if member['role'] == 'host' else "👤 参加者"
                         st.markdown(f"- {member['name']} - {role_text}")
 
-                st.markdown('</div>', unsafe_allow_html=True)
-                st.markdown("")
+                st.markdown("---")
         else:
             st.info("📭 まだグループに参加していません。ホストからの招待をお待ちください。")
 
@@ -1253,7 +1283,6 @@ def show_meetings_page():
 def show_meetings_list(user):
     """ミーティング一覧を表示"""
     st.markdown("## 📋 参加するミーティング")
-    st.markdown("")
 
     # 成功メッセージがあれば表示
     display_and_clear_success_message()
@@ -1262,33 +1291,42 @@ def show_meetings_list(user):
 
     if meetings:
         for meeting in meetings:
-            st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
-            st.markdown(f"### 📹 {meeting['title']}")
-
-            if meeting['description']:
-                st.markdown(f"**説明:** {meeting['description']}")
-
-            st.markdown(f"**グループ:** {meeting['group_name']}")
-            st.markdown(f"**ホスト:** {meeting['host_name']}")
-            st.markdown(f"**参加者数:** {meeting['participant_count']}名")
-
+            # 日時の処理
+            date_str = ""
             if meeting['scheduled_at']:
                 from datetime import datetime
                 try:
                     scheduled_dt = datetime.fromisoformat(meeting['scheduled_at'])
-                    st.markdown(f"**日時:** {scheduled_dt.strftime('%Y年%m月%d日 %H:%M')}")
+                    date_str = scheduled_dt.strftime('%Y年%m月%d日 %H:%M')
                 except:
-                    st.markdown(f"**日時:** {meeting['scheduled_at']}")
+                    date_str = meeting['scheduled_at']
+            
+            # ミーティングカードを1つのmarkdownで表示
+            st.markdown(f"""
+            <div style="
+                background-color: #fff;
+                padding: 20px;
+                border-radius: 15px;
+                margin-bottom: 15px;
+                border: 3px solid #dee2e6;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            ">
+                <h3 style="margin-top: 0; color: #333;">📹 {meeting['title']}</h3>
+                <p><strong>説明:</strong> {meeting['description'] if meeting['description'] else '（なし）'}</p>
+                <p><strong>グループ:</strong> {meeting['group_name']}</p>
+                <p><strong>ホスト:</strong> {meeting['host_name']}</p>
+                <p><strong>参加者数:</strong> {meeting['participant_count']}名</p>
+                <p><strong>日時:</strong> {date_str if date_str else '未設定'}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
             # Zoom URLがある場合は参加ボタンを表示
             if meeting.get('zoom_url'):
-                st.markdown("---")
                 show_zoom_join_button(meeting['zoom_url'], meeting.get('zoom_passcode'))
 
             # 議事録表示
             recording = db.get_recording_by_meeting(meeting['id'])
 
-            st.markdown("---")
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("📝 詳細・議事録を見る", key=f"view_minutes_{meeting['id']}", type="primary", use_container_width=True):
@@ -1302,8 +1340,7 @@ def show_meetings_list(user):
                 else:
                     st.info("📝 議事録なし")
 
-            st.markdown('</div>', unsafe_allow_html=True)
-            st.markdown("")
+            st.markdown("---")
     else:
         st.info("📭 参加予定のミーティングはありません")
 
@@ -2144,12 +2181,21 @@ def show_learning_notes_tab(user, meeting_id):
     if all_notes:
         for note in all_notes:
             if note['user_id'] != user['id']:  # 自分以外のメモを表示
-                st.markdown(f'<div class="group-card">', unsafe_allow_html=True)
-                st.markdown(f"**{note['user_name']}さんの学び**")
-                st.markdown(note['note'])
-                st.markdown(f"_記録日: {note['created_at'][:10]}_")
-                st.markdown('</div>', unsafe_allow_html=True)
-                st.markdown("")
+                # 学びカードを1つのmarkdownで表示
+                st.markdown(f"""
+                <div style="
+                    background-color: #fff;
+                    padding: 15px;
+                    border-radius: 10px;
+                    margin-bottom: 15px;
+                    border: 2px solid #dee2e6;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                ">
+                    <p style="margin: 0 0 10px 0;"><strong>{note['user_name']}さんの学び</strong></p>
+                    <p style="margin: 0 0 10px 0;">{note['note']}</p>
+                    <p style="margin: 0; font-style: italic; color: #666;">記録日: {note['created_at'][:10]}</p>
+                </div>
+                """, unsafe_allow_html=True)
     else:
         st.info("📭 まだ誰も学びを記録していません")
 
